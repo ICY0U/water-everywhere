@@ -167,7 +167,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				_report_start(NetworkSession.host())
 		KEY_J:
 			if not NetworkSession.is_active():
-				_report_start(NetworkSession.join())
+				_report_start(NetworkSession.join(
+					_join_address(), NetworkSession.port_from_command_line()
+				))
 		KEY_1, KEY_2, KEY_3:
 			_request_weather(key.keycode - KEY_1)
 		KEY_C:
@@ -217,7 +219,7 @@ func _start_from_command_line() -> void:
 	if _pending_role == NetworkSession.Role.SERVER:
 		if chosen_name.is_empty():
 			chosen_name = "Host"
-		NetworkSession.host(NetworkSession.DEFAULT_PORT, chosen_name)
+		NetworkSession.host(NetworkSession.port_from_command_line(), chosen_name)
 		return
 
 	if _pending_role != NetworkSession.Role.CLIENT:
@@ -227,13 +229,24 @@ func _start_from_command_line() -> void:
 	_join_with_retries(chosen_name)
 
 
+## Returns the address a join would use: the one on the command line, or the local default.
+##
+## Read at the moment of joining rather than cached in [method _ready], so the J key and a
+## launch argument can never disagree about where the server is. Without
+## [code]--address=[/code] this is [constant NetworkSession.DEFAULT_ADDRESS] and the game is
+## same-machine only, which is what it always silently was.
+func _join_address() -> String:
+	var requested := NetworkSession.address_from_command_line()
+	return requested if not requested.is_empty() else NetworkSession.DEFAULT_ADDRESS
+
+
 ## Tries to join, retrying while the server is still starting up.
 func _join_with_retries(chosen_name: String) -> void:
 	for attempt in JOIN_ATTEMPTS:
 		if NetworkSession.is_active() and NetworkSession.local_peer_id() > 1:
 			return
 		NetworkSession.join(
-			NetworkSession.DEFAULT_ADDRESS, NetworkSession.DEFAULT_PORT, chosen_name
+			_join_address(), NetworkSession.port_from_command_line(), chosen_name
 		)
 		# ENet reports failure asynchronously, so the outcome is not known until the peer has
 		# had a chance to poll. Waiting a beat before judging is what makes the retry mean
@@ -474,7 +487,11 @@ func _refresh_status() -> void:
 			offline.append(_status_notice)
 		offline.append("")
 		offline.append("H  host a session")
-		offline.append("J  join 127.0.0.1")
+		# Named rather than assumed: with --address= this is the only place a player can see
+		# which machine J would actually reach.
+		offline.append("J  join %s:%d" % [
+			_join_address(), NetworkSession.port_from_command_line(),
+		])
 		offline.append("Q  quit")
 		_status.text = "\n".join(offline)
 		return

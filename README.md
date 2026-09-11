@@ -6,7 +6,7 @@ The design goal is "real physics, toon surface": the water *moves* like real dee
 ocean, but it is *drawn* like a painted illustration — flat colour bands, hard-edged
 foam, and crisp specular blobs instead of smooth PBR gradients.
 
-Known issues and release-readiness findings are tracked in [AUDIT.md](AUDIT.md).
+Known issues and release-readiness findings are tracked in [AUDIT.md](docs/AUDIT.md).
 
 ![sea level](docs/sea_level.png)
 
@@ -44,6 +44,22 @@ Two players share one ocean. Run it with **F5** — *Debug → Customize Run Ins
 configured for two instances, one launched `-- --server --name=Host` and the other
 `-- --client --name=Guest`. Each reads its own arguments, hosts or joins automatically, and
 places its window on its own half of the screen, so one keypress gives a side-by-side test.
+
+To play across two machines rather than one, pass the server's address to the client. Both
+sides accept `--port=` as well, so a session can avoid the default port entirely:
+
+```sh
+# on the host
+godot --path . --rendering-driver d3d12 -- --server --name=Host --port=27015
+# on the other machine
+godot --path . --rendering-driver d3d12 -- --client --name=Guest --address=192.168.1.50 --port=27015
+```
+
+`J` uses the same address, and the offline panel names the machine it would reach, so there is
+no guessing about where the key points. Without `--address=` it is `127.0.0.1` and the game is
+same-machine only — which is what it silently was before these arguments existed. An unusable
+`--port=` is refused with a warning rather than clamped, because a typo that quietly became a
+different valid port presents as "the other machine cannot see me".
 
 | Key | Action |
 | --- | --- |
@@ -459,6 +475,7 @@ boil.
 | [scripts/ocean_particles.gd](scripts/ocean_particles.gd) | Base for particle effects that live on the ocean |
 | [scripts/ocean_spray.gd](scripts/ocean_spray.gd) | Spray and spindrift, in Beaufort proportion to the wind |
 | [scripts/rain_shower.gd](scripts/rain_shower.gd) | Rain, for the weathers that bring it |
+| [tools/run_suites.gd](tools/run_suites.gd) | Runs every suite below in turn; one command, one exit code |
 | [tools/verify_waves.gd](tools/verify_waves.gd) | Headless wave-physics assertions |
 | [tools/verify_buoyancy.gd](tools/verify_buoyancy.gd) | Headless assertions on floating bodies |
 | [tools/verify_spray.gd](tools/verify_spray.gd) | Spray and rain assertions, including GPU-vs-CPU wave parity |
@@ -516,6 +533,23 @@ the foam simulation as well as the surface.
 All seven suites should be green before believing anything visual. The spray one renders the
 particles' own copy of the wave spectrum into a texture and compares it against the CPU field
 point by point, so it needs a real renderer rather than `--headless`:
+
+```sh
+godot --path . --headless --script tools/run_suites.gd
+```
+
+That runs all seven in turn, handles the spray suite's different invocation, and exits non-zero
+if any of them fails, so it is usable from CI. Add `-- --only=raft` to run just the suites whose
+name matches. Every suite binds a fixed port, so do not run one by hand while the runner is
+going: a clash presents as `Couldn't create an ENet host` rather than as a clear error.
+
+Three checks are known to fail today, and are **not** regressions — `remote input drives real
+physics` in the multiplayer suite, and `player settles on deck` and `second player supported` in
+the raft suite. See [AUDIT.md](docs/AUDIT.md) for what is behind them. The runner reports them
+rather than suppressing them: a list of expected failures cannot tell a check failing for the
+old reason from the same check failing for a new one.
+
+To run them individually:
 
 ```sh
 godot --path . --headless --script tools/verify_waves.gd

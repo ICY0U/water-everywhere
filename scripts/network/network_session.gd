@@ -243,6 +243,36 @@ static func name_from_command_line() -> String:
 	return ""
 
 
+## Returns the address requested on the command line, or an empty string.
+##
+## Accepts [code]--address=example.org[/code]. Without it a client can only ever reach
+## [constant DEFAULT_ADDRESS], which made the advertised two-player game same-machine only: the
+## rest of the plumbing already takes an address, and nothing ever passed one.
+static func address_from_command_line() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--address="):
+			return argument.trim_prefix("--address=").strip_edges()
+	return ""
+
+
+## Returns the port requested on the command line, or [constant DEFAULT_PORT].
+##
+## Accepts [code]--port=27015[/code]. Host and client read the same argument, so one pair of
+## launch commands can put two machines on a port that is not the default.
+static func port_from_command_line() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if not argument.begins_with("--port="):
+			continue
+		var text := argument.trim_prefix("--port=")
+		# Rejected rather than clamped: a typo that silently became a valid-but-different port
+		# would present as "the other machine cannot see me", which is a miserable thing to
+		# debug for the sake of accepting nonsense.
+		if text.is_valid_int() and int(text) > 0 and int(text) <= 65535:
+			return int(text)
+		push_warning("NetworkSession: ignoring unusable --port=%s." % text)
+	return DEFAULT_PORT
+
+
 ## Returns a usable display name, falling back to something that identifies the window.
 func _resolve_name(requested: String) -> String:
 	if not requested.is_empty():

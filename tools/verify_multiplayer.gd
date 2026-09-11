@@ -406,9 +406,12 @@ func _check_camera_modes() -> void:
 
 ## Names arrive from the network, so they must be cleaned before anything renders them.
 ##
-## The session script is loaded and instanced directly rather than reached through its
-## autoload: a [code]--script[/code] run has no main loop, so autoloads are never created.
-## Testing the file itself is the more honest check in any case.
+## The session script is loaded and instanced directly rather than reached through its autoload.
+## Not because the autoload is absent: it [i]is[/i] created under [code]--script[/code] in 4.7.2,
+## and can be pulled off [code]root[/code] and made to host a real server — measured, after an
+## earlier comment here asserted the opposite. The reason to instance it is that testing the file
+## is the honest check, and that a singleton cannot hand two peers in one process the two
+## separate instances they need.
 func _check_name_sanitising() -> void:
 	var session := _make_session()
 	var cleaned: String = session._sanitise_name("  Bob\nDrop  ", 7)
