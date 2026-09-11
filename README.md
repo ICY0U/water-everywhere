@@ -4,7 +4,9 @@ A cel-shaded ocean for Godot 4.7 with physically-modelled waves.
 
 The design goal is "real physics, toon surface": the water *moves* like real deep-water
 ocean, but it is *drawn* like a painted illustration — flat colour bands, hard-edged
-foam, and crisp specular blobs instead of smooth PBR gradients.
+foam, and crisp specular blobs instead of smooth PBR gradients.
+
+Known issues and release-readiness findings are tracked in [AUDIT.md](AUDIT.md).
 
 ![sea level](docs/sea_level.png)
 
