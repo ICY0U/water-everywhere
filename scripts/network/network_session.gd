@@ -27,6 +27,11 @@ extends Node
 signal session_started(as_server: bool)
 
 ## Emitted when the session ends, whether deliberately or by losing the server.
+##
+## [param reason] is a sentence fit to show a player: the HUD prints it, so "the host quit" and
+## "nothing was listening on that port" are distinguishable from never having tried to connect.
+## Compare it against [constant REASON_LEFT] to tell this peer's own doing from something done
+## to it.
 signal session_ended(reason: String)
 
 ## Emitted when a player joins, after their name is known.
@@ -44,11 +49,27 @@ const DEFAULT_PORT: int = 27015
 ## Address a client connects to when none is given.
 const DEFAULT_ADDRESS: String = "127.0.0.1"
 
-## Largest number of players allowed in one session.
+## Largest number of players allowed in one session, the host included.
+##
+## Also the [member MultiplayerSpawner.spawn_limit] of the demo scene: one body per player, so
+## the two must agree. See [method host] for why the figure handed to ENet is one lower.
 const MAX_PLAYERS: int = 8
 
 ## Peer id the server always has. Godot fixes this; it is named here so the intent reads.
 const SERVER_PEER_ID: int = 1
+
+## Reason for a session this peer ended itself. The one reason the HUD does not show: a player
+## who pressed the key already knows what they did.
+const REASON_LEFT: String = "Left the session."
+
+## Reason for a connection that never came up.
+const REASON_CONNECTION_FAILED: String = "Could not reach a server."
+
+## Reason for a host that went away mid-session.
+const REASON_SERVER_DISCONNECTED: String = "The host closed the session."
+
+## Reason for a peer the server admitted but has no room to give a body to.
+const REASON_SESSION_FULL: String = "The session is full."
 
 ## What role this peer plays in a session.
 enum Role {
@@ -88,7 +109,11 @@ func host(port: int = DEFAULT_PORT, player_name: String = "") -> Error:
 	leave()
 
 	_peer = ENetMultiplayerPeer.new()
-	var error := _peer.create_server(port, MAX_PLAYERS)
+	# ENet counts clients, and the host is not one of its own clients — but it is a player, and
+	# it consumes a body out of the spawner's limit like everyone else. Asking ENet for
+	# MAX_PLAYERS clients therefore admits MAX_PLAYERS + 1 players, and the last to arrive is
+	# refused a body while still appearing in every roster.
+	var error := _peer.create_server(port, MAX_PLAYERS - 1)
 	if error != OK:
 		push_error("NetworkSession: could not host on port %d (error %d)." % [port, error])
 		_peer = null
@@ -129,7 +154,7 @@ func join(
 
 
 ## Ends the session and clears the roster. Safe to call when not connected.
-func leave(reason: String = "left") -> void:
+func leave(reason: String = REASON_LEFT) -> void:
 	if role == Role.NONE:
 		return
 
@@ -141,6 +166,30 @@ func leave(reason: String = "left") -> void:
 	players.clear()
 	roster_changed.emit()
 	session_ended.emit(reason)
+
+
+## Removes [param peer_id] from the session, telling them why first. Server only.
+##
+## The player is told before the socket closes, because a peer that is simply dropped cannot
+## distinguish being refused from the host crashing.
+##
+## [b]Not[/b] [method MultiplayerPeer.disconnect_peer], which is the trap here: it reaches
+## ENet's [code]enet_peer_disconnect[/code], and that resets the peer's outgoing queues before
+## sending the disconnect — throwing the rejection away unsent. Measured, not assumed: the
+## client received "the host closed the session" instead. Asking the ENet peer to disconnect
+## [i]later[/i] keeps the queue and closes once it has drained and been acknowledged.
+func reject_peer(peer_id: int, reason: String) -> void:
+	if role != Role.SERVER or _peer == null or peer_id == SERVER_PEER_ID:
+		return
+
+	_receive_rejection.rpc_id(peer_id, reason)
+	_remove_from_roster(peer_id)
+
+	# get_peer() logs an engine error for an id it does not know, so it is asked only about one
+	# ENet is still holding. A peer that vanished in the meantime needs no disconnecting.
+	if multiplayer.get_peers().has(peer_id):
+		_peer.get_peer(peer_id).peer_disconnect_later()
+	push_warning("NetworkSession: rejected peer %d — %s" % [peer_id, reason])
 
 
 ## Returns whether this peer is in a session at all.
@@ -236,6 +285,17 @@ func _receive_roster(roster: Dictionary) -> void:
 	roster_changed.emit()
 
 
+## Ends this peer's session with the reason the server gave. Server to one client only.
+@rpc("authority", "call_remote", "reliable")
+func _receive_rejection(reason: String) -> void:
+	if multiplayer.is_server():
+		return
+	# Leaving here rather than waiting for the socket to close is what puts the server's reason
+	# in front of the player: the server_disconnected that follows would otherwise replace it
+	# with the generic one. leave() returns early once the role is NONE, so it does not.
+	leave(reason)
+
+
 ## Returns a display name safe to show, from text a client supplied.
 ##
 ## A name arrives from over the network, so it is length-limited and stripped of control
@@ -251,6 +311,22 @@ func _sanitise_name(raw: String, peer_id: int) -> String:
 	if clean.is_empty():
 		return "Player %d" % peer_id
 	return clean
+## Drops [param peer_id] from the roster and tells every remaining peer. Server only.
+##
+## Shared by an ordinary disconnect and by [method reject_peer], so a rejected player leaves by
+## exactly the path a departing one does. Silent for a peer that connected but never registered:
+## there is no roster entry to announce the loss of.
+func _remove_from_roster(peer_id: int) -> void:
+	if not players.has(peer_id):
+		return
+
+	var departed: String = players[peer_id]
+	players.erase(peer_id)
+	_receive_roster.rpc(players)
+	roster_changed.emit()
+	player_left.emit(peer_id, departed)
+	print("NetworkSession: %s (peer %d) left." % [departed, peer_id])
+
 
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -263,12 +339,7 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
-	var departed: String = players.get(peer_id, "Player %d" % peer_id)
-	players.erase(peer_id)
-	_receive_roster.rpc(players)
-	roster_changed.emit()
-	player_left.emit(peer_id, departed)
-	print("NetworkSession: %s (peer %d) left." % [departed, peer_id])
+	_remove_from_roster(peer_id)
 
 
 func _on_connected_to_server() -> void:
@@ -279,9 +350,9 @@ func _on_connected_to_server() -> void:
 
 func _on_connection_failed() -> void:
 	push_warning("NetworkSession: connection failed.")
-	leave("connection failed")
+	leave(REASON_CONNECTION_FAILED)
 
 
 func _on_server_disconnected() -> void:
 	push_warning("NetworkSession: the server closed the connection.")
-	leave("server disconnected")
+	leave(REASON_SERVER_DISCONNECTED)

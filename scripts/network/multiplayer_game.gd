@@ -61,6 +61,10 @@ var _clock_broadcast_elapsed: float = 0.0
 var _server_ocean_time: float = 0.0
 var _has_server_ocean_time: bool = false
 
+## Why the last session ended, or why one would not start. Shown under "Offline" so a player
+## whose host quit can tell that apart from never having pressed a key. Empty when all is well.
+var _status_notice: String = ""
+
 
 func _ready() -> void:
 	_spawner.spawn_function = _spawn_player
@@ -112,15 +116,26 @@ func _unhandled_input(event: InputEvent) -> void:
 	match key.keycode:
 		KEY_H:
 			if not NetworkSession.is_active():
-				NetworkSession.host()
+				_report_start(NetworkSession.host())
 		KEY_J:
 			if not NetworkSession.is_active():
-				NetworkSession.join()
+				_report_start(NetworkSession.join())
 		KEY_1, KEY_2, KEY_3:
 			_request_weather(key.keycode - KEY_1)
 		KEY_C:
 			if weather != null:
 				_request_weather(weather.presets.size())
+
+
+## Puts a session that would not start at all in front of the player.
+##
+## [method NetworkSession.host] and [method NetworkSession.join] return before the network is
+## reached, so only immediate failures arrive here — a port already in use, an address that will
+## not parse. A connection refused or dropped later surfaces through
+## [signal NetworkSession.session_ended] instead.
+func _report_start(error: Error) -> void:
+	_status_notice = "" if error == OK else "Could not start: %s." % error_string(error)
+	_refresh_status()
 
 
 ## Hosts or joins according to the launch arguments, for the two-window local test.
@@ -167,19 +182,26 @@ func _join_with_retries(chosen_name: String) -> void:
 			])
 
 	push_warning("MultiplayerGame: could not reach a server; press J to retry.")
+	_status_notice = "No server found after %d attempts." % JOIN_ATTEMPTS
+	_refresh_status()
 
 
 func _on_session_started(as_server: bool) -> void:
+	_status_notice = ""
 	_refresh_status()
 	if as_server:
 		# The host is already in its own roster, so its body is spawned here rather than
 		# waiting for a join it will never receive.
-		_spawn_for_peer(NetworkSession.SERVER_PEER_ID)
+		if not _spawn_for_peer(NetworkSession.SERVER_PEER_ID):
+			push_error("MultiplayerGame: the host could not be given a body.")
 
 
-func _on_session_ended(_reason: String) -> void:
+func _on_session_ended(reason: String) -> void:
 	for child in _players.get_children():
 		child.queue_free()
+	# A deliberate leave explains itself; anything else happened to the player rather than
+	# because of them, and the HUD is the only place they could learn of it.
+	_status_notice = "" if reason == NetworkSession.REASON_LEFT else reason
 	_refresh_status()
 
 
@@ -188,7 +210,12 @@ func _on_player_joined(peer_id: int, _player_name: String) -> void:
 	if not NetworkSession.is_authority():
 		return
 	if peer_id != NetworkSession.SERVER_PEER_ID:
-		_spawn_for_peer(peer_id)
+		if not _spawn_for_peer(peer_id):
+			# No body means no camera target and no way to play, and nothing about that state
+			# recovers on its own. Refusing the peer outright beats leaving them listed as
+			# playing with nothing in the water. reject_peer redraws the HUD as it goes.
+			NetworkSession.reject_peer(peer_id, NetworkSession.REASON_SESSION_FULL)
+			return
 		_send_current_weather_to(peer_id)
 	_refresh_status()
 
@@ -203,16 +230,21 @@ func _on_player_left(peer_id: int, _player_name: String) -> void:
 
 
 ## Asks the spawner to create a body for [param peer_id]. Server only.
-func _spawn_for_peer(peer_id: int) -> void:
+##
+## Returns whether that peer now has a body. It can genuinely fail: the spawner enforces its own
+## [member MultiplayerSpawner.spawn_limit], and discarding a refusal is the difference between a
+## player and a ghost listed in every roster with nothing in the water.
+func _spawn_for_peer(peer_id: int) -> bool:
 	if _players.has_node(str(peer_id)):
-		return
-	_spawner.spawn({
+		return true
+	var body := _spawner.spawn({
 		"peer_id": peer_id,
 		"name": NetworkSession.name_for(peer_id),
 		"position": _spawn_position(peer_id),
 		"velocity": raft.linear_velocity if raft != null else Vector3.ZERO,
 		"color_index": _free_color_index(),
 	})
+	return body != null
 
 
 ## Picks the lowest colour not currently in use, so players stay told apart across churn.
@@ -369,7 +401,13 @@ func _refresh_status() -> void:
 		return
 
 	if not NetworkSession.is_active():
-		_status.text = "Offline\n\nH  host a session\nJ  join 127.0.0.1"
+		var offline := PackedStringArray(["Offline"])
+		if not _status_notice.is_empty():
+			offline.append(_status_notice)
+		offline.append("")
+		offline.append("H  host a session")
+		offline.append("J  join 127.0.0.1")
+		_status.text = "\n".join(offline)
 		return
 
 	var heading := (
