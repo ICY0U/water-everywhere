@@ -538,7 +538,7 @@ func _refresh_status() -> void:
 	lines.append("V %s   1/2/3 weather   C cycle" % _view_mode_label())
 	# Quit is worth repeating in-session: this is the only panel a player sees once they are
 	# playing, and the chord is not one anybody guesses.
-	lines.append("F climb onto raft   Ctrl+Q quit")
+	lines.append("F  climb onto raft   Ctrl+Q  quit")
 	_status.text = "\n".join(lines)
 
 
