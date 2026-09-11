@@ -536,6 +536,9 @@ func _refresh_status() -> void:
 	lines.append("WASD camera-relative move   Shift sprint   Alt slow   Q/E dive/rise")
 	lines.append("Esc release mouse / stop thrust   Left click resume")
 	lines.append("V %s   1/2/3 weather   C cycle" % _view_mode_label())
+	# Quit is worth repeating in-session: this is the only panel a player sees once they are
+	# playing, and the chord is not one anybody guesses.
+	lines.append("F climb onto raft   Ctrl+Q quit")
 	_status.text = "\n".join(lines)
 
 
