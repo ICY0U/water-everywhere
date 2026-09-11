@@ -148,13 +148,18 @@ func _run_checks() -> void:
 
 	# A check that threw partway through never reached its _report, so it is absent rather than
 	# failed. Counting the rows is what stops a crash being read as a pass.
-	var expected := 20
+	#
+	# The count is compared in BOTH directions, and that matters more than it looks. Adding
+	# two checks without updating this number once made the difference negative, which
+	# subtracted from the failure tally, cancelled a genuinely failing check and exited 0 —
+	# turning a red suite green. That is the one outcome worse than a crash reading as a pass.
+	var expected := 22
 	if _reported_checks.size() != expected:
 		printerr(
 			"\n%d of %d checks reported — one did not run to completion."
 			% [_reported_checks.size(), expected]
 		)
-		_failures += expected - _reported_checks.size()
+		_failures += absi(expected - _reported_checks.size())
 
 	if _failures == 0:
 		print("\nAll multiplayer checks PASSED")
@@ -539,6 +544,22 @@ func _check_live_controls() -> void:
 	_report("remote input drives real physics", server_body.position.x < start.x - 0.1,
 		"host displacement x=%.3f" % (server_body.position.x - start.x))
 
+	# Boarding crosses as a running count rather than a held flag, and only a real connection
+	# can show that works. It is a momentary action: a bool true for one frame can fall between
+	# two synchroniser samples and never be transmitted, so a press would be silently dropped.
+	# The count is raised directly rather than through Input.action_press, because the action
+	# path is already covered by verify_raft and because pressing actions here is process-global
+	# and leaks into later checks.
+	var board_before: int = server_input.board_requests
+	client_input.board_requests += 2
+	await create_timer(0.3).timeout
+	_report("board requests cross as a count, not a pulse",
+		server_input.board_requests == client_input.board_requests
+		and server_input.board_requests == board_before + 2,
+		"client=%d server=%d (was %d)" % [
+			client_input.board_requests, server_input.board_requests, board_before,
+		])
+
 	# Capture release clears held actions immediately, then the reliable update reaches host.
 	camera._target = client_body
 	camera._set_mouse_captured(false)
@@ -552,6 +573,17 @@ func _check_live_controls() -> void:
 	_report("capture and focus release intent", released
 		and server_input.move_direction == Vector2.ZERO and not client_input.controls_enabled,
 		"held keys clear locally and on host")
+
+	# The release above ran clear_intent(), which deliberately leaves the count alone. Were it
+	# ever zeroed, the server would read the value going backwards and ignore every later
+	# request until the client climbed back to the count it had already served — presenting as
+	# boarding that works, then silently stops, after one release of the mouse.
+	_report("clearing intent never rewinds the board count",
+		client_input.board_requests >= board_before + 2
+		and server_input.board_requests >= board_before + 2,
+		"client=%d server=%d after clear_intent()" % [
+			client_input.board_requests, server_input.board_requests,
+		])
 	for action in [&"move_forward", &"move_sprint", &"move_down"]:
 		Input.action_release(action)
 	camera.free()
