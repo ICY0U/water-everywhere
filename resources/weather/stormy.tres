@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="WeatherPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://5oewxqr8l1d" path="res://scripts/weather_preset.gd" id="1_preset"]
+
+[resource]
+script = ExtResource("1_preset")
+display_name = "Stormy"
+horizon_color = Color(0.376, 0.408, 0.435, 1)
+zenith_color = Color(0.114, 0.141, 0.184, 1)
+sun_glow_color = Color(0.408, 0.427, 0.451, 1)
+below_horizon_color = Color(0.243, 0.267, 0.286, 1)
+sky_bands = 4
+horizon_falloff = 3.4
+sun_color = Color(0.647, 0.62, 0.549, 1)
+sun_size = 0.06
+sun_glow_size = 0.6
+sun_glow_bands = 2
+sun_intensity = 0.7
+cloud_lit_color = Color(0.549, 0.573, 0.596, 1)
+cloud_mid_color = Color(0.318, 0.345, 0.384, 1)
+cloud_shadow_color = Color(0.145, 0.165, 0.204, 1)
+cloud_coverage = 0.93
+cloud_edge = 0.035
+cloud_scale = 1.7
+cloud_speed = 0.03
+cloud_octaves = 5
+cloud_light_wrap = 0.3
+cloud_base_darkening = 0.55
+storm_layer_strength = 0.6
+light_color = Color(0.71, 0.749, 0.804, 1)
+light_energy = 0.75
+sun_elevation = 26.0
+sun_azimuth = 150.0
+ambient_color = Color(0.376, 0.435, 0.502, 1)
+ambient_energy = 1.1
+ocean_sky_tint = Color(0.376, 0.42, 0.463, 1)
+ocean_shallow_color = Color(0.294, 0.463, 0.478, 1)
+ocean_mid_color = Color(0.145, 0.294, 0.341, 1)
+ocean_deep_color = Color(0.075, 0.176, 0.216, 1)
+ocean_specular_color = Color(0.784, 0.816, 0.855, 1)
+ocean_specular_strength = 0.85
+ocean_fresnel_strength = 0.34
+fog_enabled = true
+fog_color = Color(0.412, 0.447, 0.478, 1)
+fog_density = 0.0065
+fog_sky_affect = 0.42
+fog_sun_scatter = 0.08
+fog_height = 0.0
+fog_height_density = 0.11
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.028
+volumetric_fog_albedo = Color(0.435, 0.475, 0.522, 1)
+volumetric_fog_anisotropy = 0.35
+volumetric_fog_length = 140.0
+volumetric_fog_ambient_inject = 1.0
+volumetric_fog_sky_affect = 0.6
+sun_shaft_energy = 4.0
+godray_density = 0.085
+godray_color = Color(0.478, 0.522, 0.573, 1)
+godray_falloff_height = 70.0
+cloud_shadow_amount = 0.55
+cloud_shadow_scale = 130.0
+wind_speed = 19.0
+wave_steepness = 0.92
+whitecap_threshold = 0.96
+foam_persistence = 0.82
+rain_intensity = 1.0

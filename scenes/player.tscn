@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://clb58nakcb4be"]
+
+[ext_resource type="Script" uid="uid://byeqitpoc6bus" path="res://scripts/network/network_player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://boq0tdan6sol3" path="res://scripts/network/player_input.gd" id="2_input"]
+[ext_resource type="Shader" uid="uid://jv70y7va3mh1" path="res://shaders/cel.gdshader" id="3_celshader"]
+[ext_resource type="Script" uid="uid://pbsx7liw3880" path="res://scripts/network/player_replication.gd" id="4_replication"]
+[ext_resource type="Script" uid="uid://iiekji6gbukw" path="res://scripts/network/player_input_replication.gd" id="5_input_replication"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_player"]
+size = Vector3(1.2930908, 4.486786, 1.3400345)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_player"]
+resource_local_to_scene = true
+render_priority = 0
+shader = ExtResource("3_celshader")
+shader_parameter/albedo_color = Color(0.886, 0.353, 0.263, 1)
+shader_parameter/normal_strength = 1.0
+shader_parameter/use_normal_map = false
+shader_parameter/uv_scale = Vector2(1, 1)
+shader_parameter/light_bands = 3
+shader_parameter/band_softness = 0.02
+shader_parameter/shadow_lift = 0.42
+shader_parameter/shadow_tint = Color(0.42, 0.52, 0.72, 1)
+shader_parameter/shadow_tint_strength = 0.35
+shader_parameter/shadow_threshold = 0.22
+shader_parameter/shadow_edge_softness = 0.03
+shader_parameter/specular_color = Color(1, 1, 1, 1)
+shader_parameter/specular_size = 24.0
+shader_parameter/specular_strength = 0.8
+shader_parameter/rim_color = Color(1, 0.95, 0.85, 1)
+shader_parameter/rim_power = 3.0
+shader_parameter/rim_strength = 0.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_player"]
+size = Vector3(1.3143921, 2.201416, 1.3022461)
+
+[node name="Player" type="RigidBody3D" unique_id=1845281519 groups=["players", "water_subjects"]]
+collision_layer = 2
+collision_mask = 3
+script = ExtResource("1_player")
+body_density = 420.0
+hull_detail = 32
+contact_radius_scale = 1.4
+
+[node name="Collision" type="CollisionShape3D" parent="." unique_id=1352744366]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1833266, 2.2325778, -0.025531769)
+shape = SubResource("BoxShape3D_player")
+
+[node name="Mesh" type="MeshInstance3D" parent="." unique_id=335808334]
+transform = Transform3D(1, 0, 0, 0, 2.0031471, 0, 0, 0, 1, 0.19307983, 2.2374969, -0.024799109)
+material_override = SubResource("ShaderMaterial_player")
+mesh = SubResource("BoxMesh_player")
+
+[node name="NameTag" type="Label3D" parent="." unique_id=1999581145]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+pixel_size = 0.0035
+billboard = 1
+no_depth_test = true
+outline_modulate = Color(0, 0, 0, 0.8)
+text = "Player"
+font_size = 48
+
+[node name="PlayerInput" type="Node" parent="." unique_id=588789165]
+script = ExtResource("2_input")
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="PlayerInput" unique_id=1016370219]
+script = ExtResource("5_input_replication")
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=62590381]
+script = ExtResource("4_replication")

@@ -1,0 +1,18 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Exported builds.
+/build/
+/export/
+*.exe
+*.pck
+
+# Documentation output, verification logs and research notes. These are generated or
+# reference material rather than source: screenshots from the capture tools, run logs from
+# the verify suites, and the background reading. The suites regenerate anything needed.
+/docs/
+
+# Large binaries nothing references. The sky is procedural, so these HDRIs are unused; they
+# are kept on disk but left out of history to save ~10 MB per clone.
+/assets/hdri/

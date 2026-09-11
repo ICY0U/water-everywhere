@@ -1,0 +1,35 @@
+[gd_scene format=3 uid="uid://cvncfrebe1ier"]
+
+[ext_resource type="Script" uid="uid://bc51hu48curvr" path="res://scripts/raft.gd" id="1"]
+[ext_resource type="ArrayMesh" uid="uid://dkd4v8we8pvs2" path="res://assets/models/raft/Barrel_Raft.obj" id="2"]
+[ext_resource type="Script" uid="uid://dhpikt7yvqtkg" path="res://scripts/network/raft_replication.gd" id="3"]
+
+[sub_resource type="PhysicsMaterial" id="DeckMaterial"]
+friction = 0.8
+
+[sub_resource type="BoxShape3D" id="Hull"]
+size = Vector3(9, 3, 9.6)
+
+[node name="Raft" type="RigidBody3D" unique_id=2113650161 groups=["water_subjects"]]
+collision_mask = 3
+physics_material_override = SubResource("DeckMaterial")
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, -0.4, 0)
+can_sleep = false
+continuous_cd = true
+script = ExtResource("1")
+body_density = 120.0
+hull_detail = 32
+angular_drag = 4.0
+contact_radius_scale = 1.0
+
+[node name="Hull" type="CollisionShape3D" parent="." unique_id=376129379]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.304, 0)
+shape = SubResource("Hull")
+
+[node name="Model" type="MeshInstance3D" parent="." unique_id=1774578433]
+transform = Transform3D(3.5015264, 0, 0, 0, 3.5015264, 0, 0, 0, 3.5015264, -12.95, -1.5, 0)
+mesh = ExtResource("2")
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=647885675]
+script = ExtResource("3")

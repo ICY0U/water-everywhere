@@ -1,0 +1,26 @@
+# Top-most EditorConfig file.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Godot's official GDScript style: tabs, 100-column soft limit.
+[*.{gd,gdshader}]
+indent_style = tab
+indent_size = 4
+max_line_length = 100
+
+[*.{tscn,tres,godot,import}]
+indent_style = tab
+
+[*.py]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.md]
+indent_style = space
+indent_size = 2

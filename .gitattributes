@@ -1,0 +1,8 @@
+# Normalise line endings for text files Git tracks.
+* text=auto eol=lf
+
+# Godot binary resources must not be munged.
+*.png binary
+*.hdr binary
+*.exr binary
+*.ctex binary
