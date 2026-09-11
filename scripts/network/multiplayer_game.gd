@@ -175,15 +175,40 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_C:
 			if weather != null:
 				_request_weather(weather.presets.size())
+		KEY_P:
+			_toggle_pause()
 		KEY_Q:
-			_quit_game()
+			# Bare Q dives. Only the modified chord quits, and it is checked here rather than
+			# in the match because keycode alone carries no modifier state.
+			if key.ctrl_pressed:
+				_quit_game()
+
+
+## Freezes or resumes the world for this player alone.
+##
+## The sea stops with it: [member Ocean.elapsed_time] accumulates in [method Node._process] and
+## so is not advanced while the tree is paused, which keeps the CPU's idea of the surface and
+## the shader's agreeing across the freeze rather than drifting apart by the length of it.
+##
+## Deliberately local, and deliberately not offered in a session. Pausing is a single-player
+## courtesy; a networked peer cannot stop everyone else's sea, and a client that stopped only
+## its own clock would drift out of step with the authority it is being corrected toward and
+## then be dragged back the moment it resumed.
+func _toggle_pause() -> void:
+	if NetworkSession.is_active():
+		return
+	get_tree().paused = not get_tree().paused
+	_refresh_status()
 
 
 ## Leaves any session and closes the game.
 ##
-## [kbd]Escape[/kbd] is not used for this: it already releases the mouse in
-## [PlayerCamera], and a key that sometimes frees the cursor and sometimes ends the game is
-## worse than no quit key at all.
+## The chord is [kbd]Ctrl[/kbd] + [kbd]Q[/kbd], not a bare key, because every unmodified key
+## worth having is already spoken for: [kbd]Q[/kbd] alone dives, [kbd]Escape[/kbd] releases the
+## mouse in [PlayerCamera]. A key that sometimes dives and sometimes ends the game is worse
+## than no quit key at all — and dive is held rather than tapped, so the collision would fire
+## constantly. Requiring a modifier also suits an action that ends the session for everyone
+## when the host presses it.
 ##
 ## Leaving first is what lets the other side say something useful. A host that simply exits
 ## takes its socket with it and every client falls back to a bare "connection lost"; calling
@@ -492,7 +517,8 @@ func _refresh_status() -> void:
 		offline.append("J  join %s:%d" % [
 			_join_address(), NetworkSession.port_from_command_line(),
 		])
-		offline.append("Q  quit")
+		offline.append("P  pause")
+		offline.append("Ctrl+Q  quit")
 		_status.text = "\n".join(offline)
 		return
 

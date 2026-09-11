@@ -68,7 +68,9 @@ different valid port presents as "the other machine cannot see me".
 | `Q` / `E` | dive / rise |
 | `V` | toggle third / first person |
 | `Esc` / left click | release mouse and stop thrust / resume control |
-| `1` `2` `3` / `C` | weather (applies to **everyone**) |
+| `1` `2` `3` / `C` | weather (applies to **everyone**) |
+| `P` | pause (single player only) |
+| `Ctrl` + `Q` | quit |
 | `H` / `J` | host / join manually, when launched without arguments |
 
 Movement uses camera yaw in both views, with equal cardinal and diagonal thrust. Looking up or
