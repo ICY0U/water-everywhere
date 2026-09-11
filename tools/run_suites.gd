@@ -40,10 +40,17 @@ const VERDICT_MARKERS: Array[String] = ["passed", "failed", "failures", "timed o
 
 ## Lower-cased fragments that mean a suite never got as far as testing anything.
 ##
-## Each suite hosts on a fixed port, so a second run of the same suite — another terminal, another
-## editor, a colleague on the same machine — cannot bind and dies before its first assertion.
-## Observed, not imagined: a full run here reported the session suite as failing in 0.4 s while
-## that suite passes 13/13 on its own.
+## What these detect is a socket the suite could not open — [method NetworkSession.host]
+## returning a non-OK [enum Error], or the engine refusing to create an ENet host. The suite then
+## dies before its first assertion, so its exit code says "failed" about nothing it tested.
+##
+## The [i]cause[/i] is deliberately not asserted anywhere below, only guessed at in prose. A
+## competing run holding the port is the obvious suspect and each suite does host on a fixed one,
+## but that explanation is not established: ENet sets [code]SO_REUSEADDR[/code], and two ENet
+## servers were confirmed here to coexist happily on one UDP port on Windows. Deliberately
+## holding a suite's port — with a plain UDP socket, with a real ENet server, and with
+## [code]SO_EXCLUSIVEADDRUSE[/code] — produced a timeout every time, never a bind error. So a
+## port clash does not reliably present this way, and something else may produce it.
 const BIND_FAILURE_MARKERS: Array[String] = [
 	"couldn't create an enet host",
 	"could not host on port",
@@ -142,13 +149,13 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 	for failure in _failing_checks(lines):
 		_failed_checks.append("%s: %s" % [suite_name, failure])
 
-	# A suite that could not bind its port tested nothing, so it is neither a pass nor an honest
+	# A suite that could not open its socket tested nothing, so it is neither a pass nor an honest
 	# failure. Still counted against the run — an untested suite is not a green one — but named
-	# separately, because "go and close the other run" is a different instruction from "go and
-	# read the assertion that broke".
+	# separately, because "this did not run" is a different instruction from "go and read the
+	# assertion that broke". The line says what was observed, not why: see BIND_FAILURE_MARKERS.
 	if code != 0 and _is_bind_failure(lines):
 		_blocked_suites += 1
-		print("BUSY  %s %5.1fs  its port was already taken; nothing was tested" % [
+		print("BUSY  %s %5.1fs  could not open its socket; nothing was tested" % [
 			suite_name.rpad(LABEL_WIDTH), seconds,
 		])
 		return
@@ -238,7 +245,8 @@ func _report_summary(ran: int, seconds: float) -> void:
 		return
 
 	if _blocked_suites > 0:
-		print("%d suite(s) could not bind a port — close any other run and try again" % _blocked_suites)
+		print("%d suite(s) never opened a socket, so they tested nothing." % _blocked_suites)
+		print("  A competing run is the usual suspect; close any other suite and try again.")
 
 	if _failed_suites > 0 or _blocked_suites > 0:
 		print("%d of %d suite(s) did not pass in %.1fs" % [
