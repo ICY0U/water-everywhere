@@ -545,11 +545,19 @@ if any of them fails, so it is usable from CI. Add `-- --only=raft` to run just 
 name matches. Every suite binds a fixed port, so do not run one by hand while the runner is
 going: a clash presents as `Couldn't create an ENet host` rather than as a clear error.
 
-Three checks are known to fail today, and are **not** regressions — `remote input drives real
-physics` in the multiplayer suite, and `player settles on deck` and `second player supported` in
-the raft suite. See [AUDIT.md](docs/AUDIT.md) for what is behind them. The runner reports them
-rather than suppressing them: a list of expected failures cannot tell a check failing for the
-old reason from the same check failing for a new one.
+Some checks fail today. The runner names every one in its summary and
+[AUDIT.md](docs/AUDIT.md) records what is behind each, so read those rather than a list
+here — an earlier version of this paragraph named three checks and was out of date
+within hours.
+
+What is worth stating permanently is why none of them is suppressed. A list of expected
+failures cannot tell a check failing for the old reason from the same check failing for a
+new one. Every failure investigated so far has turned out to be a real defect — in the
+game or in the test — rather than a threshold that wanted loosening: a held input action
+leaking between checks because `Input.action_press` is process-global, a player pose sampled
+during a wave transient rather than at rest, and a movement check that passed only because
+the raft was heaving hard enough to fling the player along it. Each had to stay visible to
+be found.
 
 To run them individually:
 
