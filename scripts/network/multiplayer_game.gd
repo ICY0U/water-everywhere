@@ -25,6 +25,13 @@ const OCEAN_CLOCK_INTERVAL: float = 0.5
 ## Largest correction made in one frame, preventing a late packet from popping every crest.
 const OCEAN_CLOCK_MAX_CORRECTION: float = 0.012
 
+## Largest one-way latency the clock will compensate for, in seconds.
+##
+## A plausible connection is far below this. The cap is here so that a wild round-trip figure —
+## a peer mid-handshake, or a link that has just collapsed — cannot throw the sea a long way
+## into the future and leave every hull floating off its wave.
+const OCEAN_CLOCK_MAX_LATENCY: float = 0.5
+
 ## Colours handed out to players in join order, so the two windows are told apart instantly.
 const PLAYER_COLORS: Array[Color] = [
 	Color(0.886, 0.353, 0.263),
@@ -102,10 +109,51 @@ func _process(delta: float) -> void:
 		# The target advances locally between packets. Correcting toward it rather than snapping
 		# avoids a visible discontinuity in waves, cloud shadows and particles.
 		_server_ocean_time += delta
-		var error := _server_ocean_time - ocean.elapsed_time
+		# The sample describes where the sea was when it was sent, so the sea it describes is
+		# already one trip old by the time it arrives. Aiming at that instant plus the trip is
+		# what puts this client on the same sea the server solved buoyancy against.
+		#
+		# The offset moves the target; the clamp below still governs how fast the clock may
+		# travel toward it. They are deliberately separate — the clamp exists to stop a late
+		# packet popping every crest, so a large latency is converged over several frames
+		# rather than by loosening the clamp and losing that protection.
+		var target := _server_ocean_time + _authority_latency()
+		var error := target - ocean.elapsed_time
 		ocean.elapsed_time += clampf(
 			error, -OCEAN_CLOCK_MAX_CORRECTION, OCEAN_CLOCK_MAX_CORRECTION
 		)
+
+
+## Seconds the authority's clock takes to reach this peer, or 0.0 when it cannot be measured.
+##
+## ENet keeps a round-trip estimate from its own keepalives, so this costs nothing to read and
+## needs no timing packets of our own. Half of it is the one-way trip, which is what a sample
+## that travelled in one direction is behind by.
+##
+## The peer is reached through [member MultiplayerAPI.multiplayer_peer] because
+## [code]NetworkSession[/code] keeps its socket private; [method _join_with_retries] already
+## reads the peer the same way. Asking for an [ENetMultiplayerPeer] specifically is the guard
+## that matters: [OfflineMultiplayerPeer] is installed whenever a session ends, and it reports
+## [constant MultiplayerPeer.CONNECTION_CONNECTED] while having no [code]get_peer[/code] at all,
+## so a test on connection status alone passes and then calls a method that does not exist.
+func _authority_latency() -> float:
+	var enet := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet == null:
+		return 0.0
+	# Asking for a peer ENet does not know logs an engine error before returning null, and this
+	# runs every frame, so the call is avoided rather than its result checked.
+	if enet.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return 0.0
+
+	var server_peer := enet.get_peer(NetworkSession.SERVER_PEER_ID)
+	if server_peer == null:
+		return 0.0
+
+	# get_statistic() reports whole milliseconds.
+	var round_trip := float(
+		server_peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME)
+	) * 0.001
+	return clampf(round_trip * 0.5, 0.0, OCEAN_CLOCK_MAX_LATENCY)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -125,6 +173,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_C:
 			if weather != null:
 				_request_weather(weather.presets.size())
+		KEY_Q:
+			_quit_game()
+
+
+## Leaves any session and closes the game.
+##
+## [kbd]Escape[/kbd] is not used for this: it already releases the mouse in
+## [PlayerCamera], and a key that sometimes frees the cursor and sometimes ends the game is
+## worse than no quit key at all.
+##
+## Leaving first is what lets the other side say something useful. A host that simply exits
+## takes its socket with it and every client falls back to a bare "connection lost"; calling
+## [method NetworkSession.leave] hands them [constant NetworkSession.REASON_SERVER_DISCONNECTED]
+## to display instead. No farewell is sent from here on purpose — a peer being torn down
+## discards whatever is still queued for it, so a message written at this point would not
+## arrive, and the reason the other side already has is the honest one.
+func _quit_game() -> void:
+	if NetworkSession.is_active():
+		NetworkSession.leave()
+	get_tree().quit()
 
 
 ## Puts a session that would not start at all in front of the player.
@@ -407,6 +475,7 @@ func _refresh_status() -> void:
 		offline.append("")
 		offline.append("H  host a session")
 		offline.append("J  join 127.0.0.1")
+		offline.append("Q  quit")
 		_status.text = "\n".join(offline)
 		return
 

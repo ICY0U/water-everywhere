@@ -1,12 +1,12 @@
 extends SceneTree
 
-## Headless assertions on the two things a joining player must be told: which sea everyone is
-## already sailing, and which colour is still free.
+## Headless assertions on what a joining player must be told and given: which sea everyone is
+## already sailing, which colour is still free, and whether there is room at all.
 ##
-## Both defects these cover are invisible to the other suites, because those test a two-peer
-## loopback that never churns and never changes the weather before a peer arrives. Both are
-## also invisible in a screenshot: a client on the wrong weather renders a plausible ocean,
-## just not the one buoyancy was solved against.
+## The defects these cover are invisible to the other suites, because those test a two-peer
+## loopback that never churns, never changes the weather before a peer arrives, and never fills
+## up. They are also invisible in a screenshot: a client on the wrong weather renders a
+## perfectly plausible ocean, just not the one buoyancy was solved against.
 ##
 ## Run with:
 ## [codeblock lang=text]
@@ -42,6 +42,13 @@ const SURFACE_TOLERANCE: float = 0.01
 ## Peers used for the colour churn: the middle one leaves before a fourth arrives.
 const CHURN_PEERS: Array[int] = [101, 102, 103]
 
+## Port for the capacity phase. Separate again, so its server cannot collide with the one the
+## weather phase is still holding open.
+const CAPACITY_PORT: int = 27106
+
+## Seconds the surplus clients are given to finish connecting before they are counted.
+const CAPACITY_SETTLE_SECONDS: float = 3.0
+
 var _failures: int = 0
 var _started: bool = false
 var _finished: bool = false
@@ -58,6 +65,9 @@ var _client_multiplayer: MultiplayerAPI
 var _server_game: Node
 var _client_game: Node
 
+var _capacity_peer: ENetMultiplayerPeer
+var _capacity_clients: Array[ENetMultiplayerPeer] = []
+
 
 func _initialize() -> void:
 	print("verify_session_identity: colour allocation, then weather on join\n")
@@ -73,6 +83,7 @@ func _process(delta: float) -> bool:
 	if not _started:
 		_started = true
 		_check_colour_allocation()
+		_check_latency_guard()
 		return not _build_peers()
 
 	if _elapsed > TIMEOUT_SECONDS:
@@ -88,6 +99,12 @@ func _process(delta: float) -> bool:
 	if _phase == 1 and _elapsed > RPC_SECONDS:
 		_phase = 2
 		_check_joiner_adopted_weather()
+		_start_capacity_probe()
+		return false
+
+	if _phase == 2 and _elapsed > RPC_SECONDS + CAPACITY_SETTLE_SECONDS:
+		_phase = 3
+		_check_capacity()
 		_finish()
 		return true
 
@@ -287,6 +304,95 @@ func _check_joiner_adopted_weather() -> void:
 		divergence > 1.0,
 		"a peer left on preset 0 floats %.2f m out" % divergence,
 	)
+
+
+## Asserts the clock's latency lookup is safe on a peer that cannot answer it.
+##
+## [code]_authority_latency()[/code] runs every frame from [code]_process[/code], so a wrong
+## guard here is not a one-off error but a flood, and the value it returns is added to the
+## ocean clock. [OfflineMultiplayerPeer] is the dangerous case: [method NetworkSession.leave]
+## installs it, and it claims to be connected while having no [code]get_peer[/code] at all.
+func _check_latency_guard() -> void:
+	var packed := load("res://scenes/multiplayer_demo.tscn") as PackedScene
+	var game: Node = packed.instantiate()
+	root.add_child(game)
+
+	var offline := OfflineMultiplayerPeer.new()
+	_report(
+		"the offline peer is the trap it looks like",
+		offline.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+		and not offline.has_method("get_peer"),
+		"reports CONNECTED with no get_peer, so a status-only guard would call a missing method",
+	)
+
+	# No session has been started, so the game's own peer is whatever the tree came up with.
+	var latency: float = game._authority_latency()
+	_report(
+		"latency is zero when it cannot be measured",
+		is_equal_approx(latency, 0.0),
+		"got %.4f s with no live ENet peer" % latency,
+	)
+
+	game.queue_free()
+
+
+## Fills a real ENet server to prove it admits exactly one player fewer than the body limit.
+##
+## The constant alone cannot catch this: the bug was that ENet counts clients while the spawner
+## counts bodies, so only a real server, really filled, shows the off-by-one.
+func _start_capacity_probe() -> void:
+	_capacity_peer = ENetMultiplayerPeer.new()
+	if _capacity_peer.create_server(CAPACITY_PORT, NetworkSession.MAX_PLAYERS - 1) != OK:
+		_report("capacity probe hosts", false, "could not host on port %d" % CAPACITY_PORT)
+		return
+
+	# One more client than the server should accept.
+	for i in NetworkSession.MAX_PLAYERS:
+		var client := ENetMultiplayerPeer.new()
+		if client.create_client("127.0.0.1", CAPACITY_PORT) == OK:
+			_capacity_clients.append(client)
+
+
+## Counts how many of the surplus clients actually got in.
+func _check_capacity() -> void:
+	if _capacity_peer == null:
+		return
+
+	for _i in 60:
+		_capacity_peer.poll()
+		for client in _capacity_clients:
+			client.poll()
+
+	var connected := 0
+	for client in _capacity_clients:
+		if client.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			connected += 1
+
+	var admitted := connected + 1
+	_report(
+		"a full server admits one player per body",
+		admitted == NetworkSession.MAX_PLAYERS,
+		"%d clients + host = %d players for %d bodies (the ghost was %d)" % [
+			connected, admitted, NetworkSession.MAX_PLAYERS, NetworkSession.MAX_PLAYERS + 1,
+		],
+	)
+
+	var packed := load("res://scenes/multiplayer_demo.tscn") as PackedScene
+	var game: Node = packed.instantiate()
+	root.add_child(game)
+	var spawner := game.get_node("PlayerSpawner") as MultiplayerSpawner
+	_report(
+		"the spawner's limit matches the session's",
+		spawner.spawn_limit == NetworkSession.MAX_PLAYERS,
+		"spawn_limit=%d MAX_PLAYERS=%d; one body each, so they must agree" % [
+			spawner.spawn_limit, NetworkSession.MAX_PLAYERS,
+		],
+	)
+	game.queue_free()
+
+	for client in _capacity_clients:
+		client.close()
+	_capacity_peer.close()
 
 
 ## Worst vertical disagreement between two spectra over a spread of world positions.
