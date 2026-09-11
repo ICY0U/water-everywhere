@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/foam_sim.gdshader" id="1_shader"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/sim_extent = 96.0
+shader_parameter/whitecap_threshold = 0.84
+shader_parameter/whitecap_range = 0.26
+shader_parameter/foam_decay = 0.12
+shader_parameter/residue_decay = 0.55
+shader_parameter/residue_gain = 0.6
+shader_parameter/foam_spread = 0.6
+shader_parameter/contact_foam = 1.7
+shader_parameter/contact_count = 0
+shader_parameter/wake_full_speed = 4.0
+shader_parameter/wake_length = 22.0

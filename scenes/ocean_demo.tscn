@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scripts/wave_field.gd" id="1_wavefield"]
 [ext_resource type="Script" path="res://scripts/ocean.gd" id="2_ocean"]
@@ -21,6 +21,8 @@
 [ext_resource type="Script" path="res://scripts/ocean_spray.gd" id="17_spray"]
 [ext_resource type="Script" path="res://scripts/rain_shower.gd" id="18_rain"]
 [ext_resource type="Script" path="res://scripts/water_reaction_system.gd" id="19_reaction"]
+[ext_resource type="ShaderMaterial" path="res://resources/ocean_material.tres" id="1_ocean_material"]
+[ext_resource type="ShaderMaterial" path="res://resources/foam_material.tres" id="1_foam_material"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("6_skyshader")
@@ -112,86 +114,6 @@ shader_parameter/shadow_amount = 0.9
 [sub_resource type="Resource" id="Resource_wavefield"]
 script = ExtResource("1_wavefield")
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_ocean"]
-render_priority = -1
-shader = ExtResource("4_oceanshader")
-shader_parameter/peak_amplitude = 0.511
-shader_parameter/peak_wavelength = 41.6
-shader_parameter/octave_ratio = 0.74
-shader_parameter/wave_chop = 0.72
-shader_parameter/wind_angle = 45.0
-shader_parameter/wind_spread = 42.0
-shader_parameter/wave_speed = 1.0
-shader_parameter/wave_total_amplitude = 1.789
-shader_parameter/detail_normals = ExtResource("5_waternormal")
-shader_parameter/detail_scale = 0.055
-shader_parameter/detail_strength = 0.22
-shader_parameter/detail_speed = 0.045
-shader_parameter/detail_fade_start = 25.0
-shader_parameter/detail_fade_end = 150.0
-shader_parameter/light_bands = 3
-shader_parameter/band_softness = 0.008
-shader_parameter/shadow_lift = 0.55
-shader_parameter/color_shallow = Color(0.35, 0.83, 0.85, 1)
-shader_parameter/color_mid = Color(0.11, 0.52, 0.75, 1)
-shader_parameter/color_deep = Color(0.03, 0.18, 0.42, 1)
-shader_parameter/color_sky_tint = Color(0.62, 0.84, 0.93, 1)
-shader_parameter/depth_band_1 = 1.6
-shader_parameter/depth_band_2 = 7.0
-shader_parameter/depth_bands = 3
-shader_parameter/wave_shade_strength = 0.5
-shader_parameter/sun_direction = Vector3(0.308, 0.788, -0.533)
-shader_parameter/height_bands = 4
-shader_parameter/wave_band_tint = 0.5
-shader_parameter/color_subsurface = Color(0.42, 0.92, 0.72, 1)
-shader_parameter/subsurface_power = 4.0
-shader_parameter/subsurface_strength = 0.85
-shader_parameter/subsurface_rise = 0.3
-shader_parameter/foam_color = Color(0.98, 0.99, 1, 1)
-shader_parameter/foam_edge_color = Color(0.76, 0.85, 0.9, 1)
-shader_parameter/whitecap_threshold = 0.84
-shader_parameter/whitecap_range = 0.26
-shader_parameter/foam_edge_level = 0.3
-shader_parameter/foam_core_level = 0.72
-shader_parameter/foam_level_softness = 0.05
-shader_parameter/foam_noise_scale = 0.55
-shader_parameter/foam_streak_stretch = 0.38
-shader_parameter/foam_bubble_amount = 0.45
-shader_parameter/foam_map_extent = 96.0
-shader_parameter/foam_map_strength = 0.0
-shader_parameter/specular_color = Color(1, 0.99, 0.93, 1)
-shader_parameter/specular_size = 200.0
-shader_parameter/specular_strength = 1.3
-shader_parameter/specular_threshold = 0.995
-shader_parameter/specular_glitter = 0.06
-shader_parameter/fresnel_power = 6.5
-shader_parameter/fresnel_strength = 0.18
-shader_parameter/refraction_strength = 0.028
-shader_parameter/open_ocean_depth = 9.0
-shader_parameter/surface_roughness = 0.62
-shader_parameter/contact_depth = 0.9
-shader_parameter/contact_count = 0
-shader_parameter/wake_full_speed = 4.0
-shader_parameter/wake_length = 22.0
-shader_parameter/wake_bow_height = 0.35
-shader_parameter/wake_arm_height = 0.22
-shader_parameter/wake_transverse_length = 6.0
-shader_parameter/wave_time = 0.0
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_foam"]
-shader = ExtResource("13_foamsim")
-shader_parameter/sim_extent = 96.0
-shader_parameter/whitecap_threshold = 0.84
-shader_parameter/whitecap_range = 0.26
-shader_parameter/foam_decay = 0.12
-shader_parameter/residue_decay = 0.55
-shader_parameter/residue_gain = 0.6
-shader_parameter/foam_spread = 0.6
-shader_parameter/contact_foam = 1.7
-shader_parameter/contact_count = 0
-shader_parameter/wake_full_speed = 4.0
-shader_parameter/wake_length = 22.0
-
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_cube"]
 shader = ExtResource("16_celshader")
 shader_parameter/albedo_color = Color(0.886, 0.353, 0.263, 1)
@@ -222,12 +144,12 @@ directional_shadow_fade_start = 0.9
 [node name="Ocean" type="Node3D" parent="." unique_id=1979290318 node_paths=PackedStringArray("foam_field")]
 script = ExtResource("2_ocean")
 wave_field = SubResource("Resource_wavefield")
-material = SubResource("ShaderMaterial_ocean")
+material = ExtResource("1_ocean_material")
 foam_field = NodePath("FoamField")
 
 [node name="FoamField" type="Node3D" parent="Ocean"]
 script = ExtResource("14_foamfield")
-material = SubResource("ShaderMaterial_foam")
+material = ExtResource("1_foam_material")
 resolution = 512
 extent = 96.0
 drift_fraction = 0.025
