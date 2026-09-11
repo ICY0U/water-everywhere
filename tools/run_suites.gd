@@ -44,13 +44,15 @@ const VERDICT_MARKERS: Array[String] = ["passed", "failed", "failures", "timed o
 ## returning a non-OK [enum Error], or the engine refusing to create an ENet host. The suite then
 ## dies before its first assertion, so its exit code says "failed" about nothing it tested.
 ##
-## The [i]cause[/i] is deliberately not asserted anywhere below, only guessed at in prose. A
-## competing run holding the port is the obvious suspect and each suite does host on a fixed one,
-## but that explanation is not established: ENet sets [code]SO_REUSEADDR[/code], and two ENet
-## servers were confirmed here to coexist happily on one UDP port on Windows. Deliberately
-## holding a suite's port — with a plain UDP socket, with a real ENet server, and with
-## [code]SO_EXCLUSIVEADDRUSE[/code] — produced a timeout every time, never a bind error. So a
-## port clash does not reliably present this way, and something else may produce it.
+## The cause is a competing run holding the port, reproduced end to end: with one copy of
+## [code]verify_raft.gd[/code] holding 27103, a second exited in 0.6 s with
+## [code]Couldn't create an ENet host[/code] from [code]enet_connection.cpp[/code] and this runner
+## reported BUSY. Every suite hosts on a fixed port, so a second run of the same suite —
+## another terminal, another editor, a colleague on the same machine — collides with it.
+##
+## Reproducing it needs the second copy started [i]inside[/i] the first's window, and needs both
+## to be real ENet servers: a plain UDP socket holding the port is not the same test, because
+## ENet binds dual-stack on [code]::[/code] rather than an IPv4 address.
 const BIND_FAILURE_MARKERS: Array[String] = [
 	"couldn't create an enet host",
 	"could not host on port",
