@@ -35,6 +35,22 @@ const LABEL_WIDTH: int = 14
 ## Rendering driver the GPU suite is asked for by name. Its whole point is a real device.
 const GPU_DRIVER: String = "d3d12"
 
+## Lower-cased fragments that mark a suite's closing verdict line. See [method _verdict_of].
+const VERDICT_MARKERS: Array[String] = ["passed", "failed", "failures", "timed out"]
+
+## Lower-cased fragments that mean a suite never got as far as testing anything.
+##
+## Each suite hosts on a fixed port, so a second run of the same suite — another terminal, another
+## editor, a colleague on the same machine — cannot bind and dies before its first assertion.
+## Observed, not imagined: a full run here reported the session suite as failing in 0.4 s while
+## that suite passes 13/13 on its own.
+const BIND_FAILURE_MARKERS: Array[String] = [
+	"couldn't create an enet host",
+	"could not host on port",
+	"could not connect",
+	"is another run using the port",
+]
+
 ## Every suite, in the order they run.
 ##
 ## [code]gpu[/code] marks one that cannot run headless. [code]tools/verify_spray.gd[/code] renders
@@ -53,6 +69,7 @@ const SUITES: Array[Dictionary] = [
 ]
 
 var _failed_suites: int = 0
+var _blocked_suites: int = 0
 var _unlaunchable_suites: int = 0
 var _failed_checks: PackedStringArray = PackedStringArray()
 
@@ -124,6 +141,18 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 	var lines := _lines_of(output)
 	for failure in _failing_checks(lines):
 		_failed_checks.append("%s: %s" % [suite_name, failure])
+
+	# A suite that could not bind its port tested nothing, so it is neither a pass nor an honest
+	# failure. Still counted against the run — an untested suite is not a green one — but named
+	# separately, because "go and close the other run" is a different instruction from "go and
+	# read the assertion that broke".
+	if code != 0 and _is_bind_failure(lines):
+		_blocked_suites += 1
+		print("BUSY  %s %5.1fs  its port was already taken; nothing was tested" % [
+			suite_name.rpad(LABEL_WIDTH), seconds,
+		])
+		return
+
 	if code != 0:
 		_failed_suites += 1
 
@@ -147,12 +176,31 @@ func _lines_of(output: Array) -> PackedStringArray:
 
 
 ## Returns the suite's own closing line, so the summary quotes it rather than paraphrasing it.
+##
+## Decoration only — the exit code decides pass or fail, and a suite that says nothing
+## recognisable is still reported by its code. Matching is case-insensitive and covers several
+## wordings because the suites do not agree on one: "All spray checks PASSED", "all session
+## identity checks passed", "1 multiplayer check(s) FAILED" and "verify_raft: 0 failures" are all
+## in use today, and a matcher tuned to one of them silently degrades to the fallback for the
+## rest — which is exactly what it did until a GPU run reported PASS with nothing to show for it.
 func _verdict_of(lines: PackedStringArray, code: int) -> String:
 	for index in range(lines.size() - 1, -1, -1):
 		var line := lines[index].strip_edges()
-		if line.contains("checks passed") or line.contains("FAILED") or line.contains("timed out"):
-			return line
-	return "exit code %d, with no verdict line to quote" % code
+		var lowered := line.to_lower()
+		for marker in VERDICT_MARKERS:
+			if lowered.contains(marker):
+				return line
+	return "no verdict line printed; going by exit code %d" % code
+
+
+## Returns whether the suite died trying to bind or reach a socket rather than on an assertion.
+func _is_bind_failure(lines: PackedStringArray) -> bool:
+	for line in lines:
+		var lowered := line.to_lower()
+		for marker in BIND_FAILURE_MARKERS:
+			if lowered.contains(marker):
+				return true
+	return false
 
 
 ## Returns every individual check the suite reported as failing.
@@ -189,8 +237,13 @@ func _report_summary(ran: int, seconds: float) -> void:
 		quit(2)
 		return
 
-	if _failed_suites > 0:
-		print("%d of %d suite(s) FAILED in %.1fs" % [_failed_suites, ran, seconds])
+	if _blocked_suites > 0:
+		print("%d suite(s) could not bind a port — close any other run and try again" % _blocked_suites)
+
+	if _failed_suites > 0 or _blocked_suites > 0:
+		print("%d of %d suite(s) did not pass in %.1fs" % [
+			_failed_suites + _blocked_suites, ran, seconds,
+		])
 		quit(1)
 	else:
 		print("all %d suite(s) passed in %.1fs" % [ran, seconds])
