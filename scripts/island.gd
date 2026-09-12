@@ -191,14 +191,23 @@ func _apply_surf() -> void:
 	if source == null or surf_strength <= 0.0:
 		return
 
-	# An unset parameter reads as null, so a number here means another island got there first.
+	# An unset parameter reads as null, so a number here means the surf is already claimed.
+	#
+	# This reads the CLAIM, not the claimant, which is deliberate: it catches an owner sitting
+	# in an instanced sub-scene, where counting Island nodes in this scene would miss it. The
+	# cost is that it cannot tell an owning island from a non-zero shore_foam_strength saved
+	# onto the shared ocean material itself — so the warning names both causes rather than
+	# sending someone hunting an island that does not exist.
 	var claimed: Variant = source.get_shader_parameter(&"shore_foam_strength")
 	if claimed != null and float(claimed) > 0.0:
 		push_warning(
-			("%s: shoreline surf is already owned by another island in this scene, so this "
-			+ "node's surf settings are ignored. Surf is depth-derived and therefore global: "
-			+ "leave surf_strength at 0 here and the existing owner's surf covers this "
-			+ "shoreline too.") % name
+			("%s: shoreline surf is already claimed (shore_foam_strength = %s), so this node's "
+			+ "surf settings are ignored. Surf is depth-derived and therefore global. Either "
+			+ "another island owns it — leave surf_strength at 0 here and its surf covers this "
+			+ "shoreline too — or %s has been saved with a non-zero shore_foam_strength, in "
+			+ "which case clear it there, because it would light up every scene.")
+			% [name, claimed, source.resource_path if not source.resource_path.is_empty()
+				else "the ocean material"]
 		)
 		return
 
