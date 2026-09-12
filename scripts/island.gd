@@ -131,6 +131,12 @@ func height_at_world(world_xz: Vector2) -> float:
 ## [param bearing] is in radians. The waterline is where the beach profile crosses the height
 ## the sea sits at relative to this island's origin, found by bisection because the profile is
 ## smoothstepped and has no closed-form inverse.
+##
+## [b]Requires [method _profile] to descend monotonically outside [member plateau_radius].[/b]
+## Bisection needs the crossing to be unique. A subclass that puts raised ground on the beach
+## creates a second crossing, and this then converges on a mountainside and returns a confident
+## wrong number rather than failing — so keep relief inside the plateau, and assert that you
+## have. [MountainIsland] confines its peaks for exactly this reason.
 func waterline_radius(bearing: float = 0.0, sea_level: float = 0.0) -> float:
 	var target := sea_level - global_position.y
 	var direction := Vector2(cos(bearing), sin(bearing))
@@ -175,9 +181,25 @@ func rebuild() -> void:
 ## is duplicated before anything is written to it. Enabling surf on the shared resource would
 ## put a white rim at the waterline of every floating object in every scene that loads it —
 ## the depth buffer cannot tell a submerged hull from a sea bed.
+## [b]Surf is a property of the OCEAN, not of an island.[/b] It is derived from water depth, so
+## switching it on lights up every shoreline in the scene at once. Exactly one island should
+## therefore own it; the rest leave [member surf_strength] at 0 and get the surf for free. A
+## second owner is refused below rather than silently winning, because otherwise whichever
+## island happened to be readied last would decide the settings for all of them.
 func _apply_surf() -> void:
 	var source := ocean.material if ocean != null else null
 	if source == null or surf_strength <= 0.0:
+		return
+
+	# An unset parameter reads as null, so a number here means another island got there first.
+	var claimed: Variant = source.get_shader_parameter(&"shore_foam_strength")
+	if claimed != null and float(claimed) > 0.0:
+		push_warning(
+			("%s: shoreline surf is already owned by another island in this scene, so this "
+			+ "node's surf settings are ignored. Surf is depth-derived and therefore global: "
+			+ "leave surf_strength at 0 here and the existing owner's surf covers this "
+			+ "shoreline too.") % name
+		)
 		return
 
 	var surf_material := source.duplicate() as ShaderMaterial
@@ -188,6 +210,14 @@ func _apply_surf() -> void:
 
 
 ## Returns the ground height at a point in the island's own space, in metres.
+##
+## The single place the island's shape is defined: the mesh, the collider, [method
+## height_at_world] and [method waterline_radius] all go through here, so a subclass that
+## overrides this gets terrain that is real ground everywhere, for free.
+##
+## An override MUST keep the profile descending monotonically outside [member plateau_radius] —
+## see [method waterline_radius], which bisects for the shore and cannot tell a second crossing
+## from the first. Raised ground belongs inside the plateau.
 func _profile(local_xz: Vector2) -> float:
 	var distance := local_xz.length()
 	if is_zero_approx(distance):
