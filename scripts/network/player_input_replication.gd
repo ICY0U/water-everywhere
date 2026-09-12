@@ -6,7 +6,7 @@ extends MultiplayerSynchronizer
 func _init() -> void:
 	root_path = NodePath("..")
 	replication_config = SceneReplicationConfig.new()
-	for property in ["move_direction", "wants_up", "wants_down", "wants_sprint"]:
+	for property in ["move_direction", "wants_up", "wants_down", "wants_sprint", "board_requests"]:
 		var path := NodePath(".:" + property)
 		replication_config.add_property(path)
 		replication_config.property_set_spawn(path, false)

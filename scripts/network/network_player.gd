@@ -26,6 +26,17 @@ const SPRINT_MULTIPLIER: float = 2.4
 ## Vertical thrust per unit mass, for rising and diving.
 const VERTICAL_THRUST_PER_MASS: float = 9.0
 
+## How far from the raft's centre a player can be and still climb aboard, in metres.
+##
+## The hull is 9 by 9.6 m, so this reaches a couple of metres past the gunwale: far enough to
+## get back on after a wave washes you off, not far enough to cross open water.
+const BOARD_RANGE: float = 9.0
+
+## Lowest dot product between a surface normal and up that still counts as standing on it.
+##
+## Shared by deck movement and boarding so that both agree on what "aboard" means.
+const SUPPORT_NORMAL_MINIMUM: float = 0.65
+
 ## Peer id that controls this player.
 ##
 ## Setting it hands input authority to that peer while the body itself stays with the server.
@@ -52,6 +63,9 @@ const VERTICAL_THRUST_PER_MASS: float = 9.0
 @onready var _name_tag: Label3D = $NameTag
 @onready var _mesh: MeshInstance3D = $Mesh
 
+## Value of [member PlayerInput.board_requests] the server has already acted on.
+var _boards_served: int = 0
+
 
 func _ready() -> void:
 	super()
@@ -71,6 +85,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	super(delta)
+	_apply_boarding()
 	_apply_thrust()
 
 
@@ -137,18 +152,10 @@ func _apply_thrust() -> void:
 ## Ground movement is relative to the supporting body, so a drifting raft carries an idle
 ## player. The opposite force pushes back on the raft rather than creating free momentum.
 func _apply_deck_movement() -> bool:
-	# The player's cube can arrive tilted from swimming; its lowest corner is then farther
-	# below the centre than the upright half-height.
-	var half_height := absf(global_basis.x.y) + absf(global_basis.y.y) + absf(global_basis.z.y)
-	var query := PhysicsRayQueryParameters3D.create(
-		global_position, global_position + Vector3.DOWN * (half_height + 0.25), 1, [get_rid()]
-	)
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit := _deck_support()
 	if hit.is_empty():
 		return false
 	var normal: Vector3 = hit.normal
-	if normal.dot(Vector3.UP) < 0.65:
-		return false
 	var support := hit.collider as RigidBody3D
 	var support_velocity := Vector3.ZERO
 	if support != null:
@@ -161,12 +168,90 @@ func _apply_deck_movement() -> bool:
 	apply_central_force(force)
 	# A supported player balances on the deck; in water the existing free roll still applies.
 	var support_spin := support.angular_velocity if support != null else Vector3.ZERO
-	var balance := (global_basis.y.cross(normal) * 35.0 - (angular_velocity - support_spin) * 10.0) * mass
+	var balance := (
+		global_basis.y.cross(normal) * 35.0 - (angular_velocity - support_spin) * 10.0
+	) * mass
 	apply_torque(balance)
 	if support != null:
 		support.apply_force(-force, hit.position - support.global_position)
 		support.apply_torque(-balance)
 	return true
+
+
+## Returns what the player is standing on, or an empty dictionary when it is standing on nothing.
+##
+## A surface too steep to stand on counts as nothing, so a player pressed against the side of a
+## hull is not treated as being on top of it.
+func _deck_support() -> Dictionary:
+	# The player's cube can arrive tilted from swimming; its lowest corner is then farther
+	# below the centre than the upright half-height.
+	var half_height := absf(global_basis.x.y) + absf(global_basis.y.y) + absf(global_basis.z.y)
+	var query := PhysicsRayQueryParameters3D.create(
+		global_position, global_position + Vector3.DOWN * (half_height + 0.25), 1, [get_rid()]
+	)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return {}
+	var normal: Vector3 = hit.normal
+	if normal.dot(Vector3.UP) < SUPPORT_NORMAL_MINIMUM:
+		return {}
+	return hit
+
+
+## Climbs onto the raft when this player's owner asks to, and the request is allowed.
+##
+## Server-side by construction. The client only publishes a count through
+## [member PlayerInput.board_requests], exactly as it publishes its movement keys, and every
+## condition is tested here — a client asking from across the ocean, or while already standing on
+## the deck, moves nothing. Each increment is consumed whether or not it boarded, so a refused
+## request does not sit waiting to fire the moment the player happens to drift into range.
+func _apply_boarding() -> void:
+	if _input == null or _input.board_requests <= _boards_served:
+		return
+	_boards_served = _input.board_requests
+
+	var raft := _nearest_raft()
+	if raft == null:
+		return
+	# Horizontal distance only: someone treading water sits below the deck and someone thrown off
+	# a crest may be well above it, and both should be able to get back on.
+	var offset := raft.global_position - global_position
+	if Vector2(offset.x, offset.z).length() > BOARD_RANGE:
+		return
+	if _deck_support().get("collider") == raft:
+		return
+	var players := get_parent() as Node3D
+	if players == null:
+		return
+
+	# The slot the spawner would choose, so boarding lands clear of the other players and on the
+	# deck as it is tilted at this moment. Arrive upright, keeping only the facing, and travelling
+	# with the hull, so the raft moving underneath does not throw the player straight back off.
+	var yaw := global_rotation.y
+	global_transform = Transform3D(
+		Basis.from_euler(Vector3(0.0, yaw, 0.0)), raft.spawn_position(players)
+	)
+	linear_velocity = raft.linear_velocity
+	angular_velocity = Vector3.ZERO
+
+
+## Returns the nearest [Raft], or null when the scene has none.
+##
+## Found through the [code]water_subjects[/code] group rather than an exported reference: players
+## are spawned from [code]player.tscn[/code] by [MultiplayerSpawner], so there is no scene in
+## which a raft could be wired into this node.
+func _nearest_raft() -> Raft:
+	var nearest: Raft = null
+	var nearest_distance := INF
+	for node: Node in get_tree().get_nodes_in_group(&"water_subjects"):
+		var raft := node as Raft
+		if raft == null:
+			continue
+		var distance := global_position.distance_squared_to(raft.global_position)
+		if distance < nearest_distance:
+			nearest = raft
+			nearest_distance = distance
+	return nearest
 
 
 ## Gives the owning client authority over the input node, and nothing else.
