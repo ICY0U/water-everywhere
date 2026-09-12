@@ -157,6 +157,13 @@ func rebuild() -> void:
 	# Trimesh collision matches the rendered surface exactly. A height-map shape would be
 	# cheaper, but it cannot be scaled without scaling the collision node itself, which Godot
 	# handles poorly for static geometry.
+	#
+	# It is an open surface, not a solid: one vertex per column, with no sides and no underside.
+	# So a DOWNWARD ray that starts below the ground has no geometry left to cross and reports
+	# nothing — measured on the plateau, a ray from 0.011 m above the deck hits and one from
+	# 0.010 m below it misses. Anything probing this terrain must start clearly above it;
+	# [code]backface_collision[/code] does not help, because the ray never reaches a face of
+	# either winding. Primitive shapes are solid, which is why the raft never shows this.
 	_collision.shape = mesh.create_trimesh_shape()
 
 	surface_rebuilt.emit()
