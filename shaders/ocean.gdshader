@@ -139,6 +139,36 @@ uniform float foam_map_extent : hint_range(1.0, 1000.0) = 96.0;
 uniform float foam_map_strength : hint_range(0.0, 1.0) = 0.0;
 group_uniforms;
 
+// ---------------------------------------------------------------------------
+// Shoreline surf.
+//
+// Where the sea bed rises to meet the surface, water piles up and breaks continuously. This
+// is sourced from the DEPTH BUFFER rather than from any knowledge of what the land is: the
+// shader already reconstructs how much water sits between this pixel and whatever is drawn
+// behind it, and shallow water IS the shoreline. So it costs one extra term, and it works
+// for any geometry that breaks the surface without that geometry having to announce itself.
+//
+// The trade-off of depth-derived surf is that the depth is measured along the VIEW RAY, not
+// straight down, so the band widens as the camera drops toward grazing angles. That is
+// acceptable for a painted ocean and is why the width is tuned by eye rather than derived.
+//
+// OFF by default. With it on, anything floating gets a white rim at its waterline, because a
+// hull just under the surface is shallow water as far as the depth buffer is concerned —
+// which is a change to how every existing scene looks, and those scenes already have a
+// deliberate contact-and-wake foam system for exactly that job.
+// ---------------------------------------------------------------------------
+group_uniforms Shore;
+// Strength of the surf, and its on/off switch. 0 removes the term entirely.
+uniform float shore_foam_strength : hint_range(0.0, 1.0) = 0.0;
+// Water depth, in metres, at which the surf has faded out completely.
+uniform float shore_foam_depth : hint_range(0.05, 12.0) = 2.5;
+// Extra depth the surf reaches as a crest passes, in metres.
+//
+// This is what makes the foam line breathe up and down the beach instead of sitting at a
+// fixed contour: a raised surface carries the break further in, exactly as a real swash does.
+uniform float shore_foam_swash : hint_range(0.0, 8.0) = 1.6;
+group_uniforms;
+
 group_uniforms Surface;
 uniform vec3 specular_color : source_color = vec3(1.0, 0.988, 0.925);
 uniform float specular_size : hint_range(0.5, 256.0) = 48.0;
@@ -580,6 +610,18 @@ void fragment() {
 
 	float breaking = mix(analytic_break, simulated.r, map_weight);
 	float residue = simulated.g * map_weight;
+
+	// Shoreline surf, folded in BEFORE the noise shaping below so it is torn up by the same
+	// mask as the rest of the foam. Added here rather than painted over the finished colour:
+	// a smooth white band laid on top reads as a decal, where a band that goes through the
+	// shaping reads as the same material as every other piece of foam on the water.
+	//
+	// max() rather than +: where a wave is already breaking over the shallows both sources
+	// describe the same white water, and summing them would drive it past full and flatten
+	// the shaping back out into a solid puddle.
+	float shore_reach = max(shore_foam_depth + above_mean * shore_foam_swash, 0.01);
+	float shore = (1.0 - smoothstep(0.0, shore_reach, water_depth)) * shore_foam_strength;
+	breaking = max(breaking, shore);
 
 	// Tear the field up with noise. The simulation resolves foam only down to its texel
 	// size, so on its own it reads as smooth white puddles; the shape of the edge - the
