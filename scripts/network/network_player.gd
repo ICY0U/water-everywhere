@@ -150,6 +150,9 @@ const FLOAT_EXIT_GRACE: float = 1.0
 ## Value of [member PlayerInput.board_requests] the server has already acted on.
 var _boards_served: int = 0
 
+## Value of [member PlayerInput.paddle_strokes] the server has already acted on.
+var _strokes_served: int = 0
+
 ## Unbroken seconds a floating player has spent clear of the water: see
 ## [constant FLOAT_EXIT_GRACE].
 var _dry_seconds: float = 0.0
@@ -204,6 +207,9 @@ func _physics_process(delta: float) -> void:
 	_support_hit = _deck_support()
 	_update_stance(delta)
 	_apply_boarding()
+	# Its own call rather than a branch of _apply_thrust, which returns early for a GROUNDED
+	# player — and a paddler standing on the deck is exactly that.
+	_apply_paddling()
 	_apply_thrust()
 
 
@@ -259,6 +265,16 @@ func _report_remote_visual_contact() -> void:
 ## Returns the input node, for a camera that wants to follow where the player is looking.
 func input_node() -> PlayerInput:
 	return _input
+
+
+## Returns what this player is standing on this frame, or null when it stands on nothing.
+##
+## The same answer [member stance] was decided from, not a fresh probe. Probing the world again
+## later in the frame can disagree with it, and two answers to "is this player aboard" is how a
+## stroke gets accepted for a player the animation shows swimming. Only the server probes, so on
+## every other peer this is always null.
+func standing_on() -> Node:
+	return _support_hit.get("collider") as Node
 
 
 ## Pushes the body along whatever its owner is asking for.
@@ -426,6 +442,33 @@ func _apply_boarding() -> void:
 	)
 	linear_velocity = raft.linear_velocity
 	angular_velocity = Vector3.ZERO
+
+
+## Serves the paddle strokes this player's owner has asked for, through the raft underfoot.
+##
+## Server-side by construction, like boarding: the client publishes only a count, and
+## [method Raft.request_stroke] decides every condition. The raft asked is the one this player is
+## standing on this frame, not [method _nearest_raft], so a swimmer beside a raft cannot paddle
+## it; the raft then checks that again for itself.
+##
+## [b]At most one stroke waits.[/b] A request refused for a cooldown is kept rather than spent,
+## so the jitter between the owner's key-repeat clock and the raft's stroke clock cannot silently
+## eat a stroke. Anything beyond one outstanding request is dropped first, so a backlog —
+## increments bunched up by a network hitch, or a client inflating its count — cannot keep the
+## raft thrusting after the owner has stopped asking. That bounds "missing input stops thrust" at
+## one pending stroke plus its [constant Raft.STROKE_DURATION].
+##
+## Every other refusal spends the request, as a refused board request is spent: a stroke asked
+## for from the water must not sit waiting to fire the moment the player climbs back on.
+func _apply_paddling() -> void:
+	if _input == null or _input.paddle_strokes <= _strokes_served:
+		return
+	_strokes_served = maxi(_strokes_served, _input.paddle_strokes - 1)
+
+	var raft := standing_on() as Raft
+	if raft != null and raft.request_stroke(self) == Raft.StrokeResult.COOLING_DOWN:
+		return
+	_strokes_served = _input.paddle_strokes
 
 
 ## Returns the nearest [Raft], or null when the scene has none.

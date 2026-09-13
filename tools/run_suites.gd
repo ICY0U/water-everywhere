@@ -83,6 +83,7 @@ const SUITES: Array[Dictionary] = [
 	{"name": "island network", "script": "tools/verify_archipelago_network.gd", "gpu": false,
 		"args": ["--port=27119", "--name=Host"]},
 	{"name": "voyage", "script": "tools/verify_voyage.gd", "gpu": false},
+	{"name": "paddle", "script": "tools/verify_b01_paddle.gd", "gpu": false},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 
