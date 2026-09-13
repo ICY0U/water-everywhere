@@ -28,6 +28,43 @@ const EPSILON: float = 0.001
 ## Step used by finite-difference comparisons against analytic derivatives.
 const DERIVATIVE_STEP: float = 0.002
 
+## Files that each keep their own copy of the wave spectrum's fixed constants.
+##
+## The CPU copy comes first: it is the one the checks above pin to physical behaviour, so it is
+## treated as the reference the GPU copies must match.
+const SPECTRUM_SOURCES: Array[String] = [
+	"res://scripts/wave_field.gd",
+	"res://shaders/gerstner_waves.gdshaderinc",
+	"res://shaders/foam_sim.gdshader",
+]
+
+## Spectrum constants that must hold the same numbers everywhere, and what each source calls
+## them. One row per quantity; the names run in the same order as [constant SPECTRUM_SOURCES].
+##
+## The spellings differ because the include prefixes its globals with [code]WAVE_[/code] to
+## avoid colliding with the shaders that include it. Keying on one spelling would find nothing
+## in the other two files and pass for the wrong reason.
+const SPECTRUM_CONSTANTS: Array[Array] = [
+	["GRAVITY", "WAVE_GRAVITY", "GRAVITY"],
+	["WAVE_COUNT", "WAVE_COUNT", "WAVE_COUNT"],
+	["OCTAVE_DIRECTION_OFFSETS", "WAVE_DIRECTION_OFFSETS", "OCTAVE_DIRECTION_OFFSETS"],
+	["OCTAVE_PHASES", "WAVE_PHASES", "OCTAVE_PHASES"],
+	["LONGEST_WAVE_SPREAD", "WAVE_LONGEST_SPREAD", "LONGEST_WAVE_SPREAD"],
+]
+
+## Short name for each row of [constant SPECTRUM_CONSTANTS], for the result rows. The constants'
+## own names are too long to line up, and differ per source anyway.
+const SPECTRUM_LABELS: Array[String] = [
+	"gravity", "wave count", "direction offsets", "phases", "longest spread",
+]
+
+## The surface shader, which is expected to take the spectrum from [constant SPECTRUM_INCLUDE]
+## rather than keep its own copy.
+const OCEAN_SHADER: String = "res://shaders/ocean.gdshader"
+
+## The shared GPU source of truth for the spectrum.
+const SPECTRUM_INCLUDE: String = "res://shaders/gerstner_waves.gdshaderinc"
+
 
 func _init() -> void:
 	var field := WaveField.new()
@@ -45,6 +82,8 @@ func _init() -> void:
 	failures += _check_phase_offsets_break_the_origin(field)
 	failures += _check_surface_point_inversion(field)
 	failures += _check_determinism(field)
+	failures += _check_spectrum_copies_agree()
+	failures += _check_ocean_keeps_no_stale_spectrum()
 
 	if failures == 0:
 		print("\nAll wave checks PASSED")
@@ -58,6 +97,167 @@ func _init() -> void:
 func _report(label: String, passed: bool, detail: String) -> int:
 	print("%s  %s  %s" % ["PASS" if passed else "FAIL", label.rpad(LABEL_WIDTH), detail])
 	return 0 if passed else 1
+
+
+## Checks every source in [constant SPECTRUM_SOURCES] holds the same spectrum constants.
+##
+## The spectrum is written out three times, in two languages. `ocean.gdshader` now takes its
+## copy from the include, but `foam_sim.gdshader` keeps its own deliberately: it needs only the
+## two tables and a horizontal-only compression, where the include computes a full 3D frame for
+## every texel of the simulation buffer. That is a sound trade, and it leaves copies that must
+## agree bit for bit.
+##
+## `verify_spray.gd` compares the include against the CPU by rendering both, which is the
+## stronger check where it reaches — but it never evaluates `foam_sim.gdshader`, so a typo in
+## foam's tables would show up as foam appearing where no crest is breaking and nothing would
+## fail. This compares the numbers as written instead, which costs nothing and covers all three.
+func _check_spectrum_copies_agree() -> int:
+	var failures := 0
+	var sources: Array[String] = []
+	for path: String in SPECTRUM_SOURCES:
+		sources.append(FileAccess.get_file_as_string(path))
+
+	for row: int in SPECTRUM_CONSTANTS.size():
+		var names: Array = SPECTRUM_CONSTANTS[row]
+		var reference := _spectrum_numbers(sources[0], names[0], SPECTRUM_SOURCES[0])
+		var problems := PackedStringArray()
+		if reference.is_empty():
+			problems.append("%s not found in %s" % [names[0], SPECTRUM_SOURCES[0].get_file()])
+		elif reference.size() > 1 and reference.size() != WaveField.WAVE_COUNT:
+			problems.append("%s has %d entries, expected WAVE_COUNT" % [names[0], reference.size()])
+
+		for index: int in range(1, SPECTRUM_SOURCES.size()):
+			var path: String = SPECTRUM_SOURCES[index]
+			var copy := _spectrum_numbers(sources[index], names[index], path)
+			if copy.is_empty():
+				problems.append("%s not found in %s" % [names[index], path.get_file()])
+			elif copy != reference:
+				problems.append("%s in %s is %s" % [names[index], path.get_file(), copy])
+
+		var detail := "%d value(s) across %d sources" % [
+			reference.size(), SPECTRUM_SOURCES.size()
+		]
+		if not problems.is_empty():
+			detail = ", ".join(problems)
+		failures += _report(
+			"%s copies agree" % SPECTRUM_LABELS[row], problems.is_empty(), detail
+		)
+	return failures
+
+
+## Checks [constant OCEAN_SHADER] has not grown a private copy of the spectrum that drifts.
+##
+## The surface shader used to keep its own copy of these constants, and that copy was collapsed
+## onto [constant SPECTRUM_INCLUDE]. That leaves nothing in the file for
+## [method _check_spectrum_copies_agree] to compare, so a table re-added here later would be
+## invisible to it — reintroducing the duplication that was removed, unwatched.
+##
+## The invariant is therefore written to hold in both states: anything declared locally must
+## agree with the CPU copy, and a file declaring none of them must take them from the include.
+## A shader that declared its own tables and matched would pass, which is what the file looked
+## like before the collapse.
+func _check_ocean_keeps_no_stale_spectrum() -> int:
+	var code := FileAccess.get_file_as_string(OCEAN_SHADER)
+	var declared := _locally_declared_spectrum_names(code)
+	var problems := _stale_spectrum_problems(code, FileAccess.get_file_as_string(
+		SPECTRUM_SOURCES[0]
+	))
+	return _report(
+		"ocean keeps no stale spectrum",
+		problems.is_empty(),
+		_stale_spectrum_detail(declared, problems)
+	)
+
+
+## Returns the spectrum constants [param code] declares itself, under any of the spellings the
+## include and the other shaders use.
+static func _locally_declared_spectrum_names(code: String) -> PackedStringArray:
+	var declared := PackedStringArray()
+	for row: Array in SPECTRUM_CONSTANTS:
+		# Columns 1 and 2: the include's WAVE_-prefixed spelling, and the shaders' own.
+		for name: String in [row[1], row[2]]:
+			if declared.has(name):
+				continue
+			if not _spectrum_numbers(code, name, OCEAN_SHADER).is_empty():
+				declared.append(name)
+	return declared
+
+
+## Describes every way [param ocean_code] fails the invariant in
+## [method _check_ocean_keeps_no_stale_spectrum], against the CPU copy in [param cpu_code].
+static func _stale_spectrum_problems(ocean_code: String, cpu_code: String) -> PackedStringArray:
+	var problems := PackedStringArray()
+	var declared := _locally_declared_spectrum_names(ocean_code)
+	if declared.is_empty():
+		if not ocean_code.contains(SPECTRUM_INCLUDE):
+			problems.append("declares no spectrum and does not include %s" % [
+				SPECTRUM_INCLUDE.get_file()
+			])
+		return problems
+
+	for row: Array in SPECTRUM_CONSTANTS:
+		var reference := _spectrum_numbers(cpu_code, row[0], SPECTRUM_SOURCES[0])
+		for name: String in [row[1], row[2]]:
+			var local := _spectrum_numbers(ocean_code, name, OCEAN_SHADER)
+			if not local.is_empty() and local != reference:
+				problems.append("local %s is %s" % [name, local])
+	return problems
+
+
+## Returns the result detail for [method _check_ocean_keeps_no_stale_spectrum].
+##
+## A failure carries the problems themselves. Describing the state the check wanted — "matching
+## the CPU" — beside a FAIL would assert the opposite of what happened and send the reader
+## looking in the wrong file, which is worse than saying nothing.
+static func _stale_spectrum_detail(
+	declared: PackedStringArray, problems: PackedStringArray
+) -> String:
+	if not problems.is_empty():
+		return ", ".join(problems)
+	if declared.is_empty():
+		return "none declared; taken from %s" % SPECTRUM_INCLUDE.get_file()
+	return "%d declared locally, matching the CPU" % declared.size()
+
+
+## Returns the numbers a constant named [param name] is declared with in [param code].
+##
+## [param path] selects the syntax: a GLSL declaration ends at its semicolon and may carry a
+## [code]float[8](…)[/code] constructor, a GDScript one ends at the closing bracket of its array
+## or at the end of its line. Comments are stripped first, so a commented-out declaration reads
+## as absent rather than shadowing the live one.
+##
+## Only literal numbers are read, and every literal in the value is returned. A value written as
+## an expression therefore reports its operands — [code]9.0 + 0.81[/code] reads as two numbers,
+## not as 9.81 — which fails the comparison rather than being quietly evaluated. That is the
+## intended behaviour: these constants are meant to be written out literally in every copy.
+static func _spectrum_numbers(code: String, name: String, path: String) -> PackedFloat64Array:
+	var comments := RegEx.create_from_string(r"#[^\n]*|//[^\n]*|/\*[\s\S]*?\*/")
+	var source := comments.sub(code, "", true)
+	var declaration := RegEx.create_from_string(
+		r"(?m)^[^\S\n]*const\s+[^\n=]*\b" + name + r"\b[^\n=]*=(.*(?:\n[^\n]*)?)"
+	)
+	var found := declaration.search(source)
+	var numbers := PackedFloat64Array()
+	if found == null:
+		return numbers
+
+	var rest := source.substr(found.get_start(1))
+	var value := ""
+	if path.get_extension().begins_with("gdshader"):
+		value = rest.substr(0, rest.find(";"))
+		var constructor := RegEx.create_from_string(r"^\s*\w+\s*\[\s*\d*\s*\]\s*\(")
+		var prefix := constructor.search(value)
+		if prefix != null:
+			value = value.substr(prefix.get_end())
+	elif rest.strip_edges(true, false).begins_with("["):
+		value = rest.substr(0, rest.find("]"))
+	else:
+		value = rest.substr(0, rest.find("\n"))
+
+	var literal := RegEx.create_from_string(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+	for entry: RegExMatch in literal.search_all(value):
+		numbers.append(entry.get_string().to_float())
+	return numbers
 
 
 ## Restores the field to the defaults the demo ships with.

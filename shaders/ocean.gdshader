@@ -23,22 +23,18 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_disabled;
 
-// ---------------------------------------------------------------------------
-// Wave spectrum. Every value here is derived in wave_field.gd; see apply_to_material().
-// ---------------------------------------------------------------------------
-group_uniforms Waves;
-uniform float peak_amplitude : hint_range(0.0, 8.0) = 0.51;
-uniform float peak_wavelength : hint_range(1.0, 400.0) = 41.6;
-// Per-octave scaling of both amplitude and wavelength, which holds steepness constant.
-uniform float octave_ratio : hint_range(0.4, 0.95) = 0.74;
-// Horizontal displacement as a fraction of vertical amplitude. 1.0 is an exact trochoid.
-uniform float wave_chop : hint_range(0.0, 1.0) = 0.72;
-uniform float wind_angle : hint_range(0.0, 360.0) = 45.0;
-uniform float wind_spread : hint_range(0.0, 90.0) = 42.0;
-uniform float wave_speed : hint_range(0.0, 3.0) = 1.0;
-// Summed amplitude of the spectrum, used to normalise crest height into 0..1.
-uniform float wave_total_amplitude : hint_range(0.01, 40.0) = 1.79;
-group_uniforms;
+// The wave spectrum itself, shared with every other shader that has to agree with it.
+//
+// This brings in the Waves uniform group (peak_amplitude, peak_wavelength, octave_ratio,
+// wave_chop, wind_angle, wind_spread, wave_speed, wave_total_amplitude), the clock
+// (wave_time), sea_level, and the spectrum functions. All of it was previously written out
+// again here; two copies of the same eight-element phase and direction tables had to be kept
+// in step by hand, and nothing would have reported it if they ever stopped matching.
+//
+// wave_field.gd pushes the Waves uniforms under these exact names, so one
+// apply_to_material() call keeps the surface, the foam simulation, the particles and this
+// shader on the same sea.
+#include "res://shaders/gerstner_waves.gdshaderinc"
 
 group_uniforms Detail;
 uniform sampler2D detail_normals : hint_normal, filter_linear_mipmap, repeat_enable;
@@ -220,7 +216,9 @@ group_uniforms;
 // is paused in some configurations, and neither is guaranteed to start at the same
 // instant). Buoyancy, foam and camera queries evaluate the same spectrum on the CPU, so
 // every side must read one clock or floating objects sit at the wrong height.
-uniform float wave_time = 0.0;
+//
+// wave_time is declared by gerstner_waves.gdshaderinc, included above, for exactly this
+// reason: every shader that reads the spectrum reads the one clock the Ocean node pushes.
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
@@ -238,67 +236,19 @@ varying float surface_compression;
 // into sparks.
 varying float glitter;
 
-const float GRAVITY = 9.81;
-const int WAVE_COUNT = 8;
-
-// Mirrored exactly from wave_field.gd. A hash evaluated in both languages would not be
-// guaranteed to agree bit for bit, so the offsets are written out instead.
-const float OCTAVE_DIRECTION_OFFSETS[8] = float[8](
-	0.0, 0.62, -0.41, 0.87, -0.73, 0.29, -0.95, 0.53);
-const float OCTAVE_PHASES[8] = float[8](
-	0.0, 2.31, 5.02, 1.17, 3.94, 0.58, 4.61, 2.87);
-const float LONGEST_WAVE_SPREAD = 0.35;
-
-// Returns the unit travel direction of one octave. Mirrored from WaveField.
-vec2 octave_direction(int octave) {
-	float shortness = float(octave) / float(WAVE_COUNT - 1);
-	float narrowing = LONGEST_WAVE_SPREAD + (1.0 - LONGEST_WAVE_SPREAD) * shortness;
-	float angle = radians(wind_angle + wind_spread * OCTAVE_DIRECTION_OFFSETS[octave] * narrowing);
-	return vec2(cos(angle), sin(angle));
-}
-
-// Sums the wave spectrum. Mirrored exactly in wave_field.gd.
+// Samples the spectrum, adding the one quantity only the surface shader needs.
 //
-// `compression` is the determinant of the horizontal displacement Jacobian, which falls
-// out of the same tangent/binormal accumulation the normal needs, so it costs nothing.
+// The spectrum itself comes from wave_sample() in gerstner_waves.gdshaderinc — the single
+// place the maths is written for the GPU. This wrapper exists solely because the surface also
+// wants crest height as a 0..1 figure to quantise colour bands with, which is a shading
+// concern the spectrum has no business knowing about.
+//
+// Deliberately pure re-shaping: it reads wave_sample()'s output and nothing more. Re-deriving
+// an amplitude or a direction here would make this a fourth copy of the spectrum, which is
+// exactly what including the file was meant to stop.
 vec3 sample_waves(
 		vec2 pos, float t, out vec3 normal, out float height_norm, out float compression) {
-	vec3 displacement = vec3(0.0);
-	vec3 tangent = vec3(1.0, 0.0, 0.0);
-	vec3 binormal = vec3(0.0, 0.0, 1.0);
-
-	float amp = peak_amplitude;
-	float len = peak_wavelength;
-	float scaled_time = t * wave_speed;
-
-	for (int i = 0; i < WAVE_COUNT; i++) {
-		vec2 dir = octave_direction(i);
-		float k = 6.28318530718 / max(len, 0.0001);  // wave number
-		float c = sqrt(GRAVITY / k);                 // deep-water phase speed
-		float f = k * (dot(dir, pos) - c * scaled_time) + OCTAVE_PHASES[i];
-		float cos_f = cos(f);
-		float sin_f = sin(f);
-
-		float slope = k * amp;
-		float lateral_slope = wave_chop * slope;
-		float lateral = wave_chop * amp;
-
-		displacement += vec3(lateral * dir.x * cos_f, amp * sin_f, lateral * dir.y * cos_f);
-		tangent += vec3(
-			-lateral_slope * dir.x * dir.x * sin_f,
-			dir.x * slope * cos_f,
-			-lateral_slope * dir.x * dir.y * sin_f);
-		binormal += vec3(
-			-lateral_slope * dir.x * dir.y * sin_f,
-			dir.y * slope * cos_f,
-			-lateral_slope * dir.y * dir.y * sin_f);
-
-		amp *= octave_ratio;
-		len *= octave_ratio;
-	}
-
-	normal = normalize(cross(binormal, tangent));
-	compression = tangent.x * binormal.z - tangent.z * binormal.x;
+	vec3 displacement = wave_sample(pos, t, normal, compression);
 	height_norm = clamp(displacement.y / max(wave_total_amplitude, 0.0001) * 0.5 + 0.5, 0.0, 1.0);
 	return displacement;
 }

@@ -91,7 +91,12 @@ const CULL_HEIGHT_PADDING: float = 100.0
 
 ## Largest number of object contacts pushed to the shaders in one frame.
 ##
-## Must match the array size declared in [code]ocean.gdshader[/code].
+## [code]ocean.gdshader[/code] declares its contact arrays with this size as a literal, since
+## GLSL array sizes must be compile-time constants, so a change here must be made there too.
+##
+## This is also the foam simulation's limit: [constant FoamField.MAX_CONTACTS] is defined from
+## it, because every contact packed here is handed on to [method FoamField.set_contacts].
+## [code]foam_sim.gdshader[/code] holds a second literal copy of the size.
 const MAX_CONTACTS: int = 8
 
 ## How long a reported contact stays live without being renewed, in seconds.

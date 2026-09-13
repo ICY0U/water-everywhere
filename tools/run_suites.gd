@@ -74,6 +74,15 @@ const SUITES: Array[Dictionary] = [
 	{"name": "multiplayer", "script": "tools/verify_multiplayer.gd", "gpu": false},
 	{"name": "session", "script": "tools/verify_session_identity.gd", "gpu": false},
 	{"name": "raft", "script": "tools/verify_raft.gd", "gpu": false},
+	{"name": "island", "script": "tools/verify_test_island.gd", "gpu": false},
+	{"name": "player model", "script": "tools/verify_player_model.gd", "gpu": false},
+	{"name": "locomotion", "script": "tools/verify_locomotion.gd", "gpu": false},
+	{"name": "island spawn", "script": "tools/verify_island_spawn.gd", "gpu": false},
+	{"name": "player state", "script": "tools/verify_player_state.gd", "gpu": false},
+	{"name": "archipelago", "script": "tools/verify_archipelago.gd", "gpu": false},
+	{"name": "island network", "script": "tools/verify_archipelago_network.gd", "gpu": false,
+		"args": ["--port=27119", "--name=Host"]},
+	{"name": "voyage", "script": "tools/verify_voyage.gd", "gpu": false},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 
@@ -136,6 +145,9 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 		arguments.append_array(["--headless", "--script", suite["script"]])
 
 	var output: Array = []
+	if suite.has("args"):
+		arguments.append("--")
+		arguments.append_array(suite["args"])
 	var started := Time.get_ticks_msec()
 	var code := OS.execute(godot, arguments, output, true, false)
 	var seconds := float(Time.get_ticks_msec() - started) / 1000.0
@@ -162,6 +174,24 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 		])
 		return
 
+	# A suite that exited cleanly without ever printing its verdict did not pass — it STOPPED.
+	# Every suite here ends by printing its tally, so the absence of one means the run was cut
+	# short before its checks ran, and its exit code describes whatever ended it rather than
+	# whatever it proved.
+	#
+	# This is not hypothetical. On 2026-09-12 a debug autoload registered through an override.cfg
+	# called get_tree().quit(0) in _ready, which every suite in this directory then inherited.
+	# verify_raft died in 8.3 s instead of its usual 25.8 s, printed no tally, exited 0, and was
+	# reported PASS — while it was genuinely failing a collider check. The old line said so
+	# honestly ("no verdict line printed; going by exit code 0") and passed it anyway, which is
+	# the one thing a test runner must never do.
+	if code == 0 and _find_verdict(lines).is_empty():
+		_failed_suites += 1
+		print("STOP  %s %5.1fs  exited 0 without printing a verdict; it stopped, it did not pass" % [
+			suite_name.rpad(LABEL_WIDTH), seconds,
+		])
+		return
+
 	if code != 0:
 		_failed_suites += 1
 
@@ -184,21 +214,33 @@ func _lines_of(output: Array) -> PackedStringArray:
 	return joined.replace("\r", "").split("\n")
 
 
-## Returns the suite's own closing line, so the summary quotes it rather than paraphrasing it.
+## Returns the suite's own closing line, or an empty string if it never printed one.
 ##
-## Decoration only — the exit code decides pass or fail, and a suite that says nothing
-## recognisable is still reported by its code. Matching is case-insensitive and covers several
-## wordings because the suites do not agree on one: "All spray checks PASSED", "all session
-## identity checks passed", "1 multiplayer check(s) FAILED" and "verify_raft: 0 failures" are all
-## in use today, and a matcher tuned to one of them silently degrades to the fallback for the
-## rest — which is exactly what it did until a GPU run reported PASS with nothing to show for it.
-func _verdict_of(lines: PackedStringArray, code: int) -> String:
+## No longer decoration: whether this finds anything is what separates a suite that finished from
+## one that stopped, so a clean exit with no verdict is reported STOP rather than PASS. Matching
+## is case-insensitive and covers several wordings because the suites do not agree on one: "All
+## spray checks PASSED", "all session identity checks passed", "1 multiplayer check(s) FAILED"
+## and "verify_raft: 0 failures" are all in use today, and a matcher tuned to one of them silently
+## degrades for the rest — which is exactly what it did until a GPU run reported PASS with nothing
+## to show for it.
+##
+## A suite added here MUST print a line one of [constant VERDICT_MARKERS] matches, or it will be
+## reported as having stopped even when it passed. That is the safe direction to fail in.
+func _find_verdict(lines: PackedStringArray) -> String:
 	for index in range(lines.size() - 1, -1, -1):
 		var line := lines[index].strip_edges()
 		var lowered := line.to_lower()
 		for marker in VERDICT_MARKERS:
 			if lowered.contains(marker):
 				return line
+	return ""
+
+
+## Returns the suite's own closing line, so the summary quotes it rather than paraphrasing it.
+func _verdict_of(lines: PackedStringArray, code: int) -> String:
+	var verdict := _find_verdict(lines)
+	if not verdict.is_empty():
+		return verdict
 	return "no verdict line printed; going by exit code %d" % code
 
 

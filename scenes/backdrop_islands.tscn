@@ -1,0 +1,155 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/island.gd" id="1_island"]
+[ext_resource type="Script" path="res://scripts/exploration_island.gd" id="2_mountain"]
+[ext_resource type="Shader" path="res://shaders/cel.gdshader" id="3_cel"]
+
+[sub_resource type="ShaderMaterial" id="Material_near_rock"]
+shader = ExtResource("3_cel")
+shader_parameter/albedo_color = Color(0.243, 0.271, 0.318, 1)
+shader_parameter/use_normal_map = false
+shader_parameter/light_bands = 3
+shader_parameter/band_softness = 0.04
+shader_parameter/shadow_lift = 0.3
+shader_parameter/shadow_tint = Color(0.42, 0.52, 0.72, 1)
+shader_parameter/shadow_tint_strength = 0.38
+shader_parameter/specular_strength = 0.05
+shader_parameter/rim_strength = 0.15
+
+[sub_resource type="ShaderMaterial" id="Material_far_rock"]
+shader = ExtResource("3_cel")
+shader_parameter/albedo_color = Color(0.306, 0.345, 0.408, 1)
+shader_parameter/use_normal_map = false
+shader_parameter/light_bands = 3
+shader_parameter/band_softness = 0.06
+shader_parameter/shadow_lift = 0.38
+shader_parameter/shadow_tint = Color(0.46, 0.56, 0.76, 1)
+shader_parameter/shadow_tint_strength = 0.42
+shader_parameter/specular_strength = 0.0
+shader_parameter/rim_strength = 0.12
+
+[sub_resource type="ShaderMaterial" id="Material_sand"]
+shader = ExtResource("3_cel")
+shader_parameter/albedo_color = Color(0.776, 0.702, 0.525, 1)
+shader_parameter/use_normal_map = false
+shader_parameter/light_bands = 3
+shader_parameter/band_softness = 0.05
+shader_parameter/shadow_tint_strength = 0.4
+shader_parameter/specular_strength = 0.08
+
+[node name="BackdropIslands" type="Node3D"]
+
+[node name="NorthRidge" type="StaticBody3D" parent="."]
+position = Vector3(-500, 0, -1650)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 230
+beach_radius = 287.5
+shelf_radius = 322.0
+extent = 379.5
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 7
+
+[node name="EastPeak" type="StaticBody3D" parent="."]
+position = Vector3(1770, 0, -660)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 195
+beach_radius = 243.75
+shelf_radius = 273.0
+extent = 321.75
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 21
+
+[node name="SouthMassif" type="StaticBody3D" parent="."]
+position = Vector3(-1550, 0, 1030)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 270
+beach_radius = 337.5
+shelf_radius = 378.0
+extent = 445.5
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 3
+
+[node name="FarRange" type="StaticBody3D" parent="."]
+position = Vector3(460, 0, 1750)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 280
+beach_radius = 350.0
+shelf_radius = 392.0
+extent = 462.0
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 11
+
+[node name="WesternNeedles" type="StaticBody3D" parent="."]
+position = Vector3(-1820, 0, -480)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 180
+beach_radius = 225.0
+shelf_radius = 251.99999999999997
+extent = 297.0
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 27
+
+[node name="EasternRidge" type="StaticBody3D" parent="."]
+position = Vector3(1680, 0, 1130)
+script = ExtResource("2_mountain")
+landscape = 3
+collision_layer = 0
+collision_mask = 0
+collision_enabled = false
+faceted = true
+deck_height = 5.0
+plateau_radius = 210
+beach_radius = 262.5
+shelf_radius = 294.0
+extent = 346.5
+resolution = 30
+shore_variation = 0.20
+material = SubResource("Material_far_rock")
+surf_strength = 0.0
+terrain_seed = 42
+

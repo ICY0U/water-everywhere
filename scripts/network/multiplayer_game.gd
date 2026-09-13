@@ -72,9 +72,17 @@ var _has_server_ocean_time: bool = false
 ## whose host quit can tell that apart from never having pressed a key. Empty when all is well.
 var _status_notice: String = ""
 
+## Process id of the second window this host opened, or -1 when it has opened none.
+var _second_window_pid: int = -1
+var _debug_overlay: Control
+
 
 func _ready() -> void:
 	_spawner.spawn_function = _spawn_player
+	_debug_overlay = load("res://scripts/ui/debug_overlay.gd").new()
+	_debug_overlay.name = "DebugOverlay"
+	_debug_overlay.set("game", self)
+	$HUD.add_child(_debug_overlay)
 
 	NetworkSession.session_started.connect(_on_session_started)
 	NetworkSession.session_ended.connect(_on_session_ended)
@@ -157,6 +165,8 @@ func _authority_latency() -> float:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _debug_overlay != null and _debug_overlay.get("is_open"):
+		return
 	var key := event as InputEventKey
 	if key == null or not key.is_pressed() or key.echo:
 		return
@@ -164,11 +174,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	match key.keycode:
 		KEY_H:
 			if not NetworkSession.is_active():
-				_report_start(NetworkSession.host())
+				_report_start(NetworkSession.host(
+					NetworkSession.port_from_command_line(), NetworkSession.name_from_command_line()
+				))
 		KEY_J:
-			if not NetworkSession.is_active():
+			if NetworkSession.is_authority():
+				_launch_second_window()
+			elif not NetworkSession.is_active():
 				_report_start(NetworkSession.join(
-					_join_address(), NetworkSession.port_from_command_line()
+					_join_address(), NetworkSession.port_from_command_line(),
+					NetworkSession.name_from_command_line()
 				))
 		KEY_1, KEY_2, KEY_3:
 			_request_weather(key.keycode - KEY_1)
@@ -182,6 +197,40 @@ func _unhandled_input(event: InputEvent) -> void:
 			# in the match because keycode alone carries no modifier state.
 			if key.ctrl_pressed:
 				_quit_game()
+
+
+## Opens a second game window that joins this host, for the two-player local test.
+##
+## Only one window opens when the project is run; pressing J on the host starts the other one
+## rather than requiring the editor to launch two instances up front. That keeps a single-player
+## launch single, and means the second player exists only once someone asks for it.
+##
+## The new process is given [code]--client[/code] so it joins on its own, and the host's port so
+## it finds this session rather than the default. It is deliberately not tracked or killed with
+## this one: it is an independent player, and a host quitting should not close someone's window.
+func _launch_second_window() -> void:
+	if _second_window_pid != -1 and OS.is_process_running(_second_window_pid):
+		_status_notice = "A second window is already open."
+		_refresh_status()
+		return
+
+	var arguments := PackedStringArray()
+	# Under the editor the executable is the editor itself, so it needs pointing at the project;
+	# an exported game already knows what it is running.
+	if OS.has_feature("editor"):
+		arguments.append_array(["--path", ProjectSettings.globalize_path("res://")])
+	arguments.append_array([
+		"--", "--client", "--name=Guest",
+		"--port=%d" % NetworkSession.port_from_command_line(),
+	])
+
+	var pid := OS.create_process(OS.get_executable_path(), arguments)
+	if pid == -1:
+		push_error("MultiplayerGame: could not open a second window.")
+		_status_notice = "Could not open a second window."
+	else:
+		_second_window_pid = pid
+	_refresh_status()
 
 
 ## Freezes or resumes the world for this player alone.
@@ -512,13 +561,12 @@ func _refresh_status() -> void:
 			offline.append(_status_notice)
 		offline.append("")
 		offline.append("H  host a session")
-		# Named rather than assumed: with --address= this is the only place a player can see
-		# which machine J would actually reach.
-		offline.append("J  join %s:%d" % [
+		# The two keys are a sequence, not alternatives: only one window opens on launch, so
+		# the second player does not exist until the host asks for one. Saying so here stops
+		# J reading as a thing to try first and finding no server.
+		offline.append("J  join %s:%d   (host first with H)" % [
 			_join_address(), NetworkSession.port_from_command_line(),
 		])
-		offline.append("P  pause")
-		offline.append("Ctrl+Q  quit")
 		_status.text = "\n".join(offline)
 		return
 
@@ -532,13 +580,8 @@ func _refresh_status() -> void:
 	for id: int in ids:
 		var marker := "> " if id == NetworkSession.local_peer_id() else "  "
 		lines.append("%s%s" % [marker, NetworkSession.players[id]])
-	lines.append("")
-	lines.append("WASD camera-relative move   Shift sprint   Alt slow   Q/E dive/rise")
-	lines.append("Esc release mouse / stop thrust   Left click resume")
-	lines.append("V %s   1/2/3 weather   C cycle" % _view_mode_label())
-	# Quit is worth repeating in-session: this is the only panel a player sees once they are
-	# playing, and the chord is not one anybody guesses.
-	lines.append("F  climb onto raft   Ctrl+Q  quit")
+	if not _status_notice.is_empty():
+		lines.append(_status_notice)
 	_status.text = "\n".join(lines)
 
 

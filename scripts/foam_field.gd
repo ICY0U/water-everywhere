@@ -24,8 +24,13 @@ signal buffers_rebuilt
 
 ## Largest number of object contacts the simulation shader accepts.
 ##
-## Must match the array size declared in [code]foam_sim.gdshader[/code].
-const MAX_CONTACTS: int = 8
+## Taken from [constant Ocean.MAX_CONTACTS] rather than declared separately, because [Ocean]
+## fills the arrays passed to [method set_contacts]. A lower limit here would silently drop
+## contacts that still dent the rendered surface, leaving wakes with no foam behind them.
+##
+## [code]foam_sim.gdshader[/code] declares its contact arrays with this size as a literal,
+## since GLSL array sizes must be compile-time constants, so a change must be made there too.
+const MAX_CONTACTS: int = Ocean.MAX_CONTACTS
 
 ## Longest simulation step accepted, in seconds.
 ##

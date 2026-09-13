@@ -4,15 +4,23 @@ A cel-shaded ocean for Godot 4.7 with physically-modelled waves.
 
 The design goal is "real physics, toon surface": the water *moves* like real deep-water
 ocean, but it is *drawn* like a painted illustration — flat colour bands, hard-edged
-foam, and crisp specular blobs instead of smooth PBR gradients.
-
-Known issues and release-readiness findings are tracked in [AUDIT.md](docs/AUDIT.md).
+foam, and crisp specular blobs instead of smooth PBR gradients.
+
+
+
+The production plan, its chunk-by-chunk gates and the evidence behind each completed chunk are in
+[GAME_PLAN.md](GAME_PLAN.md) and [planning/](planning/).
 
 ![sea level](docs/sea_level.png)
 
 ## Running it
 
-Open the project in Godot 4.7 and press F5, or:
+Open the project in Godot 4.7 and press **F5** to play `scenes/archipelago.tscn`.
+Press **H** to host or **J** to join. You then spawn on the larger starter island, with a mountainous exploration island, five small
+islands and six low-poly background ranges. Terrain has basic cel-shaded sand/earth/rock
+textures and no vegetation. See [island world notes and previews](docs/island_world.md).
+
+Or launch directly:
 
 ```sh
 "D:/MainSystems/Steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" \
@@ -27,23 +35,20 @@ Open the project in Godot 4.7 and press F5, or:
 | Mouse | look |
 | `1` / `2` / `3` | sunny / overcast / stormy |
 | `C` | cycle weather |
-| `R` | ride the waves (camera floats on the surface) |
-| `F` | reset to overview height |
+| `V` | toggle first / third person |
+| `F` | climb onto a nearby raft |
 | `Esc` | release the mouse |
 
 ## Multiplayer
 
-Players now start on the floating barrel raft. The imported OBJ and its materials live in
-`assets/models/raft/`; `scenes/raft.tscn` provides the deck collision and buoyant hull.
-WASD moves across the deck relative to the moving raft, and swimming controls resume in water.
-Late joiners spawn in a clear deck slot at the raft's current position.
-See [raft integration and validation](docs/raft_integration.md) and the
-[in-game view](docs/raft_in_game.png).
+The main archipelago starts offline. Press **H** to host or **J** to join an existing host.
+Players arrive on the starter island. Press **J** while already hosting to open a second
+client window for a local test.
+Explicit `--server` and `--client` arguments remain available.
 
-Two players share one ocean. Run it with **F5** — *Debug → Customize Run Instances* is already
-configured for two instances, one launched `-- --server --name=Host` and the other
-`-- --client --name=Guest`. Each reads its own arguments, hosts or joins automatically, and
-places its window on its own half of the screen, so one keypress gives a side-by-side test.
+The separate `scenes/multiplayer_demo.tscn` still starts players on the floating barrel raft.
+Its deck movement, buoyancy and boarding behavior are described in
+[raft integration and validation](docs/raft_integration.md).
 
 To play across two machines rather than one, pass the server's address to the client. Both
 sides accept `--port=` as well, so a session can avoid the default port entirely:
@@ -68,10 +73,12 @@ different valid port presents as "the other machine cannot see me".
 | `Q` / `E` | dive / rise |
 | `V` | toggle third / first person |
 | `Esc` / left click | release mouse and stop thrust / resume control |
-| `1` `2` `3` / `C` | weather (applies to **everyone**) |
-| `P` | pause (single player only) |
+| `1` `2` `3` / `C` | weather (applies to **everyone**) |
+
+| `P` | pause (single player only) |
+
 | `Ctrl` + `Q` | quit |
-| `H` / `J` | host / join manually, when launched without arguments |
+| `H` / `J` | host / join when offline; J opens a second client when hosting |
 
 Movement uses camera yaw in both views, with equal cardinal and diagonal thrust. Looking up or
 down and rolling in waves do not rotate the steering axes. Releasing the mouse or switching
@@ -545,10 +552,9 @@ if any of them fails, so it is usable from CI. Add `-- --only=raft` to run just 
 name matches. Every suite binds a fixed port, so do not run one by hand while the runner is
 going: a clash presents as `Couldn't create an ENet host` rather than as a clear error.
 
-Some checks fail today. The runner names every one in its summary and
-[AUDIT.md](docs/AUDIT.md) records what is behind each, so read those rather than a list
+The runner names every failing check in its summary, so read that rather than a list
 here — an earlier version of this paragraph named three checks and was out of date
-within hours.
+within hours. When a check does fail, [planning/](planning/) records what was behind it.
 
 What is worth stating permanently is why none of them is suppressed. A list of expected
 failures cannot tell a check failing for the old reason from the same check failing for a

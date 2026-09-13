@@ -108,6 +108,13 @@ signal surface_rebuilt
 ## Extra depth the surf reaches as a crest passes, in metres.
 @export_range(0.0, 8.0, 0.1) var surf_swash: float = 1.6
 
+@export_group("Geometry")
+## Horizon scenery needs a silhouette, but no physics mesh.
+@export var collision_enabled: bool = true
+
+## Flat triangle normals for intentionally low-poly scenery.
+@export var faceted: bool = false
+
 var _mesh_instance: MeshInstance3D
 var _collision: CollisionShape3D
 
@@ -170,7 +177,8 @@ func rebuild() -> void:
 	# 0.010 m below it misses. Anything probing this terrain must start clearly above it;
 	# [code]backface_collision[/code] does not help, because the ray never reaches a face of
 	# either winding. Primitive shapes are solid, which is why the raft never shows this.
-	_collision.shape = mesh.create_trimesh_shape()
+	_collision.shape = mesh.create_trimesh_shape() if collision_enabled else null
+	_collision.disabled = not collision_enabled
 
 	surface_rebuilt.emit()
 
@@ -287,7 +295,14 @@ func _build_mesh() -> ArrayMesh:
 	# The surface is lit rather than analytic, so it needs real normals. Generating them from
 	# the committed geometry keeps them consistent with the winding above.
 	var tool := SurfaceTool.new()
-	tool.create_from(mesh, 0)
+	if faceted:
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		tool.set_smooth_group(-1)
+		for index in indices:
+			tool.set_uv(uvs[index])
+			tool.add_vertex(vertices[index])
+	else:
+		tool.create_from(mesh, 0)
 	tool.generate_normals()
 	return tool.commit()
 

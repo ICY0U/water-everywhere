@@ -473,11 +473,24 @@ func _check_live_controls() -> void:
 		var spawner := MultiplayerSpawner.new()
 		spawner.name = "Spawner"
 		spawner.spawn_path = NodePath("../Players")
+		# Both branches share ONE physics world in this test, so the authority body and its
+		# remote proxy spawn at the same point and overlap. A frozen RigidBody3D still collides:
+		# freeze_mode defaults to FREEZE_MODE_STATIC and is never set anywhere in this project,
+		# so the proxy is a solid immovable collider sitting inside the body it mirrors. Jolt
+		# resolves that overlap by pushing the authority body out — measured at +3.67 m/s along
+		# +X while its own linear_velocity read +0.01, which is the tell: position advancing
+		# without velocity is depenetration, not thrust. That is what made "remote input drives
+		# real physics" report positive displacement against correctly received -X intent.
+		# The raft check below already avoids this the same way.
+		var is_proxy_branch: bool = branch == _client_root
 		spawner.spawn_function = func(data: Variant) -> Node:
 			var body := packed.instantiate() as NetworkPlayer
 			body.name = str(data)
 			body.owner_peer_id = int(data)
 			body.ocean = ocean
+			if is_proxy_branch:
+				body.collision_layer = 0
+				body.collision_mask = 0
 			return body
 		branch.add_child(spawner)
 	(_server_root.get_node("Spawner") as MultiplayerSpawner).spawn(owner_id)

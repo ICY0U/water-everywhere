@@ -132,6 +132,9 @@ var _yaw: float = 0.0
 var _pitch: float = -0.18
 var _mouse_captured: bool = false
 
+## A local UI owns input while open. Camera follow continues, but look and movement stop.
+var input_blocked: bool = false
+
 
 func _ready() -> void:
 	_apply_mode()
@@ -139,6 +142,8 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if input_blocked:
+		return
 	var motion := event as InputEventMouseMotion
 	if motion != null and _mouse_captured:
 		_yaw -= deg_to_rad(motion.relative.x * mouse_sensitivity)
@@ -221,7 +226,7 @@ func follow(body: Node3D) -> void:
 	if body is NetworkPlayer:
 		var input := (body as NetworkPlayer).input_node()
 		input.movement_camera = self
-		input.controls_enabled = _mouse_captured
+		input.controls_enabled = _mouse_captured and not input_blocked
 
 
 ## Returns the body being followed, or null.
@@ -302,6 +307,7 @@ func _apply_local_body_layer() -> void:
 
 
 func _set_mouse_captured(captured: bool) -> void:
+	captured = captured and not input_blocked
 	_mouse_captured = captured
 	Input.mouse_mode = (
 		Input.MOUSE_MODE_CAPTURED if captured else Input.MOUSE_MODE_VISIBLE

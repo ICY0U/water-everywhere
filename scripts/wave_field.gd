@@ -27,8 +27,11 @@ extends Resource
 ## Gravitational acceleration used by the dispersion relation, in metres per second squared.
 const GRAVITY: float = 9.81
 
-## Number of waves summed. Must match [code]WAVE_COUNT[/code] in [code]ocean.gdshader[/code]
-## and in [code]foam_sim.gdshader[/code].
+## Number of waves summed. Must match [code]WAVE_COUNT[/code] in
+## [code]gerstner_waves.gdshaderinc[/code], which every GPU consumer of the spectrum includes,
+## and in [code]foam_sim.gdshader[/code], which keeps its own copy on purpose — it needs only a
+## horizontal compression term, and routing it through the full sample would compute vertical
+## terms it discards for every texel of the simulation buffer.
 const WAVE_COUNT: int = 8
 
 ## Significant wave height of a fully developed sea: [code]H = 0.21 * U^2 / g[/code].

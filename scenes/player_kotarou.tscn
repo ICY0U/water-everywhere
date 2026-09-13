@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://c60myiokolfxe"]
+
+[ext_resource type="Script" uid="uid://byeqitpoc6bus" path="res://scripts/network/network_player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://boq0tdan6sol3" path="res://scripts/network/player_input.gd" id="2_input"]
+[ext_resource type="Script" uid="uid://pbsx7liw3880" path="res://scripts/network/player_replication.gd" id="4_replication"]
+[ext_resource type="Script" uid="uid://iiekji6gbukw" path="res://scripts/network/player_input_replication.gd" id="5_input_replication"]
+[ext_resource type="PackedScene" uid="uid://c8gatdworjall" path="res://assets/characters/kotarou_player.glb" id="6_model"]
+[ext_resource type="Script" uid="uid://t273pt5nnbej" path="res://scripts/character_visual.gd" id="7_visual"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_player"]
+friction = 0.2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_player"]
+size = Vector3(1.55, 4.125, 1.55)
+
+[node name="Player" type="RigidBody3D" unique_id=600297134 groups=["players", "water_subjects"]]
+collision_layer = 2
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_player")
+script = ExtResource("1_player")
+balance_enabled = true
+foot_force_enabled = false
+deck_movement_enabled = true
+body_density = 420.0
+hull_detail = 32
+contact_radius_scale = 1.4
+
+[node name="Collision" type="CollisionShape3D" parent="." unique_id=686735618]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0625, 0)
+shape = SubResource("BoxShape3D_player")
+
+[node name="Visual" type="Node3D" parent="." unique_id=1195218134]
+script = ExtResource("7_visual")
+
+[node name="Model" parent="Visual" unique_id=1359478514 instance=ExtResource("6_model")]
+transform = Transform3D(2.5, 0, 0, 0, 2.5, 0, 0, 0, 2.5, 0, 0, 0)
+
+[node name="NameTag" type="Label3D" parent="." unique_id=1681750938]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.875, 0)
+pixel_size = 0.00875
+billboard = 1
+no_depth_test = true
+outline_modulate = Color(0, 0, 0, 0.8)
+text = "Player"
+font_size = 48
+
+[node name="PlayerInput" type="Node" parent="." unique_id=1435629343]
+script = ExtResource("2_input")
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="PlayerInput" unique_id=868578336]
+script = ExtResource("5_input_replication")
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=172156605]
+script = ExtResource("4_replication")

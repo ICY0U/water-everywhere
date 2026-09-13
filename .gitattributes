@@ -6,3 +6,10 @@
 *.hdr binary
 *.exr binary
 *.ctex binary
+
+# Model formats. .glb and .obj were relying on `text=auto` detection, which happened to be
+# right for the character mesh but is a guess: a mesh whose bytes look textual enough would
+# have its line endings rewritten on checkout and arrive corrupt. Stated explicitly instead.
+*.glb binary
+*.gltf binary
+*.obj binary

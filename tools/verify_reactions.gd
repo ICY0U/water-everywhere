@@ -1,6 +1,26 @@
 extends SceneTree
 
 ## Structural and live-event checks for the water reaction/replication pass.
+##
+## Also guards the contract between [Ocean]'s contact limit and the shaders that receive the
+## contacts; see [method _check_contact_uniforms].
+
+## Shaders that receive the contacts [Ocean] packs, and so must size their contact uniforms to
+## [constant Ocean.MAX_CONTACTS].
+const CONTACT_SHADERS: Array[String] = [
+	"res://shaders/ocean.gdshader",
+	"res://shaders/foam_sim.gdshader",
+]
+
+## Uniforms in each of [constant CONTACT_SHADERS] that carry the contact limit. The three arrays
+## are sized by it; [code]contact_count[/code] carries it as its [code]hint_range[/code] maximum.
+const CONTACT_UNIFORMS: Array[String] = [
+	"contacts", "contact_motion", "contact_wake", "contact_count",
+]
+
+## Deepest [code]#include[/code] chain followed when reading a shader. Godot rejects cyclic
+## includes anyway; this only stops a broken one from hanging the suite.
+const INCLUDE_DEPTH_LIMIT: int = 4
 
 var _failures: int = 0
 
@@ -10,6 +30,8 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	_check_contact_uniforms()
+
 	var packed := load("res://scenes/ocean_demo.tscn") as PackedScene
 	var demo := packed.instantiate()
 	root.add_child(demo)
@@ -67,3 +89,73 @@ func _check(label: String, passed: bool) -> void:
 	print("%s  %s" % ["PASS" if passed else "FAIL", label])
 	if not passed:
 		_failures += 1
+
+
+## Checks each of [constant CONTACT_SHADERS] sizes its contact uniforms to
+## [constant Ocean.MAX_CONTACTS].
+##
+## GLSL array sizes must be literals, so the shaders cannot read the constant and nothing else
+## ties them to it: raise it alone and the extra contacts have nowhere to go, with no error from
+## either side. [constant FoamField.MAX_CONTACTS] is derived from the same constant, so this one
+## check covers both halves of the contact path.
+func _check_contact_uniforms() -> void:
+	for path: String in CONTACT_SHADERS:
+		var sizes := _contact_uniform_sizes(_shader_source(path))
+		var wrong := _contact_size_mismatches(sizes, Ocean.MAX_CONTACTS)
+		var label := "%s sizes its contact uniforms to Ocean.MAX_CONTACTS (%d)" % [
+			path.get_file(), Ocean.MAX_CONTACTS
+		]
+		if not wrong.is_empty():
+			label += ": " + ", ".join(wrong)
+		_check(label, wrong.is_empty())
+
+
+## Returns the source of the shader at [param path] with its [code]#include[/code] files
+## appended, so a uniform moved into an include is still found.
+static func _shader_source(path: String, depth: int = 0) -> String:
+	var code := FileAccess.get_file_as_string(path)
+	if depth >= INCLUDE_DEPTH_LIMIT:
+		return code
+	var include := RegEx.create_from_string(r'#include\s+"([^"]+)"')
+	for found: RegExMatch in include.search_all(code):
+		var target := found.get_string(1)
+		if target.is_relative_path():
+			target = path.get_base_dir().path_join(target)
+		code += "\n" + _shader_source(target, depth + 1)
+	return code
+
+
+## Returns the size each contact uniform is declared with in [param code], keyed by name.
+##
+## Arrays report their length, and [code]contact_count[/code] its [code]hint_range[/code]
+## maximum. Comments are stripped first, so a commented-out declaration is not mistaken for the
+## live one. A size written as anything but a literal is reported as not found, which fails
+## loudly rather than guessing.
+static func _contact_uniform_sizes(code: String) -> Dictionary[String, int]:
+	var comments := RegEx.create_from_string(r"//[^\n]*|/\*[\s\S]*?\*/")
+	code = comments.sub(code, "", true)
+	var sizes: Dictionary[String, int] = {}
+	var arrays := RegEx.create_from_string(r"uniform\s+vec4\s+(\w+)\s*\[\s*(\d+)\s*\]")
+	for found: RegExMatch in arrays.search_all(code):
+		sizes[found.get_string(1)] = found.get_string(2).to_int()
+	var count := RegEx.create_from_string(
+		r"uniform\s+int\s+contact_count\s*:\s*hint_range\s*\(\s*0\s*,\s*(\d+)"
+	)
+	var hint := count.search(code)
+	if hint != null:
+		sizes["contact_count"] = hint.get_string(1).to_int()
+	return sizes
+
+
+## Describes each of [constant CONTACT_UNIFORMS] whose size in [param sizes] is not
+## [param expected], or that was not found at all. Empty when everything agrees.
+static func _contact_size_mismatches(
+	sizes: Dictionary[String, int], expected: int
+) -> PackedStringArray:
+	var wrong := PackedStringArray()
+	for uniform_name: String in CONTACT_UNIFORMS:
+		if not sizes.has(uniform_name):
+			wrong.append("%s not found" % uniform_name)
+		elif sizes[uniform_name] != expected:
+			wrong.append("%s=%d" % [uniform_name, sizes[uniform_name]])
+	return wrong

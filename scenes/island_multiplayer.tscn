@@ -1,0 +1,230 @@
+[gd_scene load_steps=32 format=3]
+
+[ext_resource type="Script" path="res://scripts/wave_field.gd" id="1_wavefield"]
+[ext_resource type="Script" path="res://scripts/ocean.gd" id="2_ocean"]
+[ext_resource type="Script" path="res://scripts/free_camera.gd" id="3_camera"]
+[ext_resource type="Shader" path="res://shaders/cel_sky.gdshader" id="4_skyshader"]
+[ext_resource type="Shader" path="res://shaders/cel.gdshader" id="5_celshader"]
+[ext_resource type="Script" path="res://scripts/weather_controller.gd" id="6_weather"]
+[ext_resource type="Script" path="res://scripts/weather_preset.gd" id="7_preset"]
+[ext_resource type="Resource" path="res://resources/weather/sunny.tres" id="8_sunny"]
+[ext_resource type="Resource" path="res://resources/weather/overcast.tres" id="9_overcast"]
+[ext_resource type="Resource" path="res://resources/weather/stormy.tres" id="10_stormy"]
+[ext_resource type="Shader" path="res://shaders/cel_godrays.gdshader" id="11_godrays"]
+[ext_resource type="Script" path="res://scripts/atmosphere.gd" id="12_atmosphere"]
+[ext_resource type="Shader" path="res://shaders/cloud_shadow_caster.gdshader" id="13_cloudshadow"]
+[ext_resource type="Script" path="res://scripts/foam_field.gd" id="14_foamfield"]
+[ext_resource type="Script" path="res://scripts/ocean_spray.gd" id="15_spray"]
+[ext_resource type="Script" path="res://scripts/rain_shower.gd" id="16_rain"]
+[ext_resource type="Script" path="res://scripts/water_reaction_system.gd" id="17_reaction"]
+[ext_resource type="ShaderMaterial" path="res://resources/ocean_material.tres" id="18_ocean_material"]
+[ext_resource type="ShaderMaterial" path="res://resources/foam_material.tres" id="19_foam_material"]
+[ext_resource type="PackedScene" path="res://scenes/raft.tscn" id="20_raft"]
+[ext_resource type="Script" path="res://scripts/island.gd" id="21_island"]
+[ext_resource type="Script" path="res://scripts/network/island_game.gd" id="22_game"]
+[ext_resource type="Script" path="res://scripts/network/player_camera.gd" id="23_camera"]
+[ext_resource type="PackedScene" uid="uid://c60myiokolfxe" path="res://scenes/player_kotarou.tscn" id="24_playerscene"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("4_skyshader")
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("ShaderMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+ambient_light_color = Color(0.42, 0.58, 0.78, 1)
+ambient_light_sky_contribution = 0.0
+ambient_light_energy = 0.35
+reflected_light_source = 2
+tonemap_mode = 2
+tonemap_white = 6.0
+adjustment_enabled = true
+adjustment_contrast = 1.18
+adjustment_saturation = 1.35
+fog_enabled = true
+fog_light_color = Color(0.68, 0.82, 0.91, 1)
+fog_sun_scatter = 0.35
+fog_density = 0.0016
+fog_sky_affect = 0.25
+fog_height = 0.0
+fog_height_density = 0.06
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.008
+volumetric_fog_albedo = Color(0.78, 0.87, 0.96, 1)
+volumetric_fog_anisotropy = 0.75
+volumetric_fog_length = 180.0
+volumetric_fog_ambient_inject = 0.4
+volumetric_fog_sky_affect = 0.4
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_godrays"]
+shader = ExtResource("11_godrays")
+shader_parameter/density = 0.035
+shader_parameter/density_bands = 5
+shader_parameter/band_softness = 0.12
+shader_parameter/floor_height = 0.0
+shader_parameter/falloff_height = 45.0
+shader_parameter/falloff_power = 2.0
+shader_parameter/patch_strength = 0.45
+shader_parameter/patch_scale = 0.012
+shader_parameter/patch_drift = Vector2(0.35, 0.12)
+shader_parameter/fog_time = 0.0
+shader_parameter/albedo = Color(0.72, 0.85, 0.95, 1)
+shader_parameter/emission = Color(0, 0, 0, 1)
+shader_parameter/emission_energy = 0.0
+shader_parameter/edge_fade = 12.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_cloudshadow"]
+shader = ExtResource("13_cloudshadow")
+shader_parameter/coverage = 0.34
+shader_parameter/edge = 0.06
+shader_parameter/scale = 90.0
+shader_parameter/octaves = 4
+shader_parameter/wind_direction = Vector2(1, 0.35)
+shader_parameter/wind_speed = 6.0
+shader_parameter/cloud_time = 0.0
+shader_parameter/shadow_amount = 0.9
+
+[sub_resource type="Resource" id="Resource_wavefield"]
+script = ExtResource("1_wavefield")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_island"]
+shader = ExtResource("5_celshader")
+shader_parameter/albedo_color = Color(0.721, 0.624, 0.424, 1)
+shader_parameter/use_normal_map = false
+shader_parameter/light_bands = 3
+shader_parameter/specular_strength = 0.0
+
+[node name="IslandMultiplayer" type="Node3D" node_paths=PackedStringArray("ocean", "weather", "island")]
+script = ExtResource("22_game")
+player_scene = ExtResource("24_playerscene")
+ocean = NodePath("Ocean")
+weather = NodePath("Weather")
+island = NodePath("Island")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 40, 0)
+light_color = Color(1, 0.965, 0.898, 1)
+light_energy = 1.05
+light_angular_distance = 0.5
+shadow_enabled = true
+shadow_bias = 0.06
+shadow_normal_bias = 1.5
+light_volumetric_fog_energy = 12.0
+directional_shadow_max_distance = 120.0
+directional_shadow_fade_start = 0.9
+
+[node name="Ocean" type="Node3D" parent="." node_paths=PackedStringArray("foam_field", "follow_target")]
+script = ExtResource("2_ocean")
+wave_field = SubResource("Resource_wavefield")
+material = ExtResource("18_ocean_material")
+foam_field = NodePath("FoamField")
+follow_target = NodePath("../PlayerCamera")
+
+[node name="FoamField" type="Node3D" parent="Ocean"]
+script = ExtResource("14_foamfield")
+material = ExtResource("19_foam_material")
+resolution = 512
+extent = 96.0
+drift_fraction = 0.025
+
+[node name="Island" type="StaticBody3D" parent="." node_paths=PackedStringArray("ocean")]
+script = ExtResource("21_island")
+deck_height = 4.0
+plateau_radius = 20.0
+beach_radius = 40.0
+shelf_radius = 50.0
+shelf_height = -1.5
+base_depth = -12.0
+extent = 60.0
+resolution = 120
+shore_variation = 0.08
+material = SubResource("ShaderMaterial_island")
+ocean = NodePath("../Ocean")
+surf_strength = 0.9
+surf_depth = 2.5
+surf_swash = 1.6
+
+[node name="RaftOnLand" parent="." node_paths=PackedStringArray("ocean") instance=ExtResource("20_raft")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 4)
+ocean = NodePath("../Ocean")
+
+[node name="RaftOnWater" parent="." node_paths=PackedStringArray("ocean") instance=ExtResource("20_raft")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, -0.6, 0)
+ocean = NodePath("../Ocean")
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="PlayerSpawner" type="MultiplayerSpawner" parent="."]
+spawn_path = NodePath("../Players")
+spawn_limit = 8
+
+[node name="PlayerCamera" type="Node3D" parent="." node_paths=PackedStringArray("ocean")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 12, 30)
+script = ExtResource("23_camera")
+ocean = NodePath("../Ocean")
+
+[node name="SpringArm" type="SpringArm3D" parent="PlayerCamera"]
+spring_length = 12.0
+margin = 0.3
+collision_mask = 1
+
+[node name="Camera" type="Camera3D" parent="PlayerCamera/SpringArm"]
+current = true
+fov = 70.0
+
+[node name="Atmosphere" type="Node3D" parent="." node_paths=PackedStringArray("world_environment", "sun", "follow_target", "ocean_clock")]
+script = ExtResource("12_atmosphere")
+world_environment = NodePath("../WorldEnvironment")
+sun = NodePath("../SunLight")
+follow_target = NodePath("../PlayerCamera")
+ocean_clock = NodePath("../Ocean")
+volume_extent = 320.0
+volume_height = 220.0
+follow_snap = 16.0
+godray_material = SubResource("ShaderMaterial_godrays")
+cloud_shadow_material = SubResource("ShaderMaterial_cloudshadow")
+cloud_shadow_height = 45.0
+cloud_shadow_size = 500.0
+
+[node name="Weather" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun", "ocean", "atmosphere")]
+script = ExtResource("6_weather")
+presets = Array[ExtResource("7_preset")]([ExtResource("8_sunny"), ExtResource("9_overcast"), ExtResource("10_stormy")])
+world_environment = NodePath("../WorldEnvironment")
+sun = NodePath("../SunLight")
+ocean = NodePath("../Ocean")
+atmosphere = NodePath("../Atmosphere")
+
+[node name="OceanSpray" type="Node3D" parent="." node_paths=PackedStringArray("ocean", "weather", "follow_target")]
+script = ExtResource("15_spray")
+ocean = NodePath("../Ocean")
+weather = NodePath("../Weather")
+follow_target = NodePath("../PlayerCamera")
+
+[node name="RainShower" type="Node3D" parent="." node_paths=PackedStringArray("ocean", "weather", "follow_target")]
+script = ExtResource("16_rain")
+ocean = NodePath("../Ocean")
+weather = NodePath("../Weather")
+follow_target = NodePath("../PlayerCamera")
+ripple_ring_count = 1
+
+[node name="WaterReactions" type="Node3D" parent="." node_paths=PackedStringArray("ocean")]
+script = ExtResource("17_reaction")
+ocean = NodePath("../Ocean")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Status" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 460.0
+offset_bottom = 260.0
+theme_override_colors/font_color = Color(1, 1, 1, 0.9)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 5
+text = "Offline"
