@@ -1,7 +1,7 @@
 # Water EveryWhere — Game Design and Testable Production Plan
 
 **Revision:** 2 • 13 September 2026  
-**Status:** production plan in progress. A01-A04 complete: baseline captured, the one failing suite fixed, a Windows build exported and verified, and a voyage scene with an authoritative run phase added. **15/15 suites now pass.** No propulsion yet; the first human play prompted three Phase A fixes. See [A01](planning/A01_BASELINE.md), [A02a](planning/A02A_REMOTE_INPUT_FIX.md) and [A03/A04](planning/A03_A04_EXPORT_AND_VOYAGE.md).  
+**Status:** production plan in progress. A01-A04 complete: baseline captured, the one failing suite fixed, a Windows build exported and verified, and a voyage scene with an authoritative run phase added. B01 propulsion is implemented and verified headlessly but its human gate is open, so it is `READY FOR USER TEST` rather than complete. **17/17 suites now pass.** See [A01](planning/A01_BASELINE.md), [A02a](planning/A02A_REMOTE_INPUT_FIX.md) and [A03/A04](planning/A03_A04_EXPORT_AND_VOYAGE.md).  
 **Name:** Water EveryWhere. Retire the old working title “Lost at Sea” in future product-facing work.  
 **Platform:** Windows PC first; existing Godot/Jolt/cel-shaded foundation.  
 **Players:** tune for 3–4; support and qualify 2–8. Solo is initially a development mode, not a launch promise.  
@@ -389,7 +389,7 @@ Next eligible chunk:
 
 Every shared feature specifies sender validation, agreement, initialization for joiners, disconnect and restart cleanup. Apply meaningful cases, not tests that merely mirror private implementation.
 
-Statuses: `PLANNED`, `RESEARCHING`, `IMPLEMENTING`, `VERIFYING`, `READY FOR USER TEST`, `ACCEPTED`, `BLOCKED`, `DEFERRED`. Unchecked chunks are not complete. A01 baseline capture is complete; later chunks remain `PLANNED`. See [A01 report](planning/A01_BASELINE.md) for the reproducible failure and outstanding human tests. Checkboxes record completed work, while each checkpoint report separately lists human tests and limitations. No source commit or exported build is implied by a checked baseline report.
+Statuses: `PLANNED`, `RESEARCHING`, `IMPLEMENTING`, `VERIFYING`, `READY FOR USER TEST`, `ACCEPTED`, `BLOCKED`, `DEFERRED`. Unchecked chunks are not complete. A01-A04 are complete; B01 is `READY FOR USER TEST` with its automated clauses passing and its human clause open, and every later chunk remains `PLANNED`. See [A01 report](planning/A01_BASELINE.md) for the reproducible failure and outstanding human tests. Checkboxes record completed work, while each checkpoint report separately lists human tests and limitations. No source commit or exported build is implied by a checked baseline report.
 
 ## 10. Workable chunks
 
@@ -423,9 +423,13 @@ Gate: two peers agree on objective/phase, late join initializes correctly, three
 
 ### Phase B — Reliable raft feel
 
-- [ ] **B01 — One paddle action**  
+- [ ] **B01 — One paddle action** — `READY FOR USER TEST`  
 Depends: A04. Validated propulsion and basic feedback; measure force/drag rather than guess units.  
 Gate: host/client see start/stop; off-raft strokes rejected; missing input stops thrust. User starts, turns and stops in test bay.
+
+**Implemented and verified headlessly 14 September 2026; the human clause is open.** `tools/verify_b01_paddle.gd` proves the automated half over a real loopback session: host and client both see a stroke start and stop, holding repeats one stroke per stroke duration, each request is served exactly once, a burst of five collapses to one, missing input stops thrust with the key still held, a client cannot start a stroke itself, a stroke from the water is refused as `NOT_ABOARD` and does not fire on reboarding, paddling moves the raft further than drift, and strokes from opposite edges turn it opposite ways. `scenes/test_bay.tscn` and `tools/verify_test_bay.gd` add the calm measuring scene the gate names, with its own weather preset because a preset is the only lever on wind.
+
+**Still required to check this box:** a human starting, turning and stopping the raft in the test bay. No one has played it, so the gate's last sentence is unmet and the chunk is not complete. A force measured headlessly is not a raft that feels like anything.
 
 - [ ] **B02 — Shared paddling**  
 Depends: B01. Two-sided force points, aggregate thrust cap and a few tuning controls.  
@@ -710,4 +714,9 @@ Initial design references: [PEAK](https://store.steampowered.com/app/3527290/PEA
 | DEC11 | Short slice before full voyage | C07 pacing |
 | DEC12 | One chunk then human test; implementation still planned | Each accepted checkpoint |
 
-**Next: B01 - one paddle action.** Phase A is complete: baseline captured, the one red check fixed, a verified Windows build, and a voyage scene whose crew starts ashore beside a moored raft with a visible destination. What that scene still lacks is any way to travel - arrival is currently proved by moving a body, not by sailing. B01 adds validated propulsion with measured force and drag, in the voyage scene, and its gate is a human starting, turning and stopping the raft. Two A04 human tests are also open and do not need B01 first: whether a player identifies home within 30 seconds, and keyboard/mouse comfort in the exported build.
+**Next: play the raft.** Three human tests are open and none of them needs another line of code. B01's own gate — starting, turning and stopping the raft in the test bay — plus the two A04 tests: whether a player identifies home within 30 seconds, and keyboard/mouse comfort in the exported build. B01's propulsion is implemented and every automated clause of its gate passes, so what is unknown now is feel, and no suite can answer that. **B02 should not start until B01's human test passes**, because shared paddling tunes a stroke that has never been judged by a person; if the single stroke is wrong, two of them are wrong together.
+
+Fixed alongside, outside the chunk list, from a human play report and a bug the suites could not see:
+
+- **The character floated face down.** The swim clip was playing correctly the whole time; the body was a tall uniform-density box, which floats on its side like a log, at a measured mean of 94 degrees from upright. A submersion-scaled upright servo holds a swimmer at 2.9 degrees in a calm sea and 13.4 in a storm, and `verify_player_state.gd` now guards it.
+- **Impacts painted a white slab on the sea.** One term in the impact-ring shader was a shape scaled by a fade rather than a signed distance, so it landed every fragment exactly on `ALPHA_SCISSOR_THRESHOLD`, which draws opaque. Measured at a raft-sized impact: 21.07% of frame near-white before, 3.13% after. `verify_reactions.gd` now guards the shader source, because the ring kept its `visible` flag throughout the bug and every live check passed on the broken version.
