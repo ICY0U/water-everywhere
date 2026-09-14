@@ -21,6 +21,60 @@ enum StrokeResult {
 	NOT_AUTHORITY,
 }
 
+## Seconds one shove lasts, from brace to release.
+##
+## Shorter than [constant STROKE_DURATION] because a shove is one committed effort rather than a
+## repeating rhythm: long enough that the force is not a single-tick spike, short enough that a
+## press reads as a press. It also bounds how long a disconnecting pusher can keep shoving.
+const PUSH_DURATION: float = 0.55
+
+## Seconds before the same pusher may shove again.
+##
+## [b]Longer than [constant PUSH_DURATION], deliberately.[/b] When the two were the same number
+## the cooldown expired exactly as the shove ended, so a player tapping G every 0.55 s applied
+## 90 kN continuously — which is the thing [member PlayerInput.push_requests] refuses to allow by
+## holding, arrived at by tapping instead. The gap is the rest between efforts, and it is what
+## makes a shove one committed heave rather than a throttle.
+const PUSH_COOLDOWN: float = 1.2
+
+## How far from the raft's centre a pusher can stand and still reach the hull, in metres.
+##
+## The hull is 9 by 9.6 m, so its corner is about 6.6 m from centre; this reaches roughly an arm
+## past that. Deliberately shorter than [constant NetworkPlayer.BOARD_RANGE], which is 9.0: you
+## can scramble aboard from further away than you can brace against a hull and shove it.
+const PUSH_RANGE: float = 7.5
+
+## Why a shove was or was not applied.
+##
+## Separate from [enum StrokeResult] rather than shared, because the two refuse for opposite
+## reasons: a stroke needs the paddler ABOARD, a shove needs them off it and standing on
+## something solid. One enum covering both would have members that are unreachable for half its
+## callers, and a test asserting the wrong one would still read as passing.
+enum PushResult {
+	## The shove was applied to the raft.
+	ACCEPTED,
+	## The pusher is standing on this raft, so their shove has nothing to push against.
+	##
+	## Pushing a hull you are standing on cancels: the force you put into it comes back through
+	## your own feet. This is the whole reason a shove is a different action from a stroke.
+	ABOARD,
+	## The pusher is not standing on anything solid — swimming, or in the air.
+	NO_FOOTING,
+	## The pusher is too far from the hull to reach it.
+	OUT_OF_REACH,
+	## The pusher is directly under the hull's centre in plan view, so there is no direction to
+	## shove in.
+	##
+	## Its own member rather than folded into [constant OUT_OF_REACH], which would be a refusal
+	## passing for the wrong reason — the exact failure this enum is split up to prevent. A test
+	## asserting OUT_OF_REACH here would be asserting a lie.
+	TOO_CLOSE,
+	## That pusher's previous shove has not finished.
+	COOLING_DOWN,
+	## Called on a peer that does not own this raft's physics.
+	NOT_AUTHORITY,
+}
+
 ## Seconds one stroke lasts, from catch to release.
 ##
 ## Shared with the client so the held-key repeat cadence and the server's cooldown are the same
@@ -77,6 +131,53 @@ const SPAWN_OFFSETS: Array[Vector2] = [
 ## position rather than assumed, so kneeling at the bow turns differently from amidships.
 @export_range(0.0, 8.0, 0.05) var stroke_lever: float = 2.4
 
+## Force one shove delivers, in newtons, at the hull's centre of mass.
+##
+## [b]Set from play, and NOT from measurement — unlike [member stroke_force], which was.[/b] That
+## is a deliberate admission rather than an oversight, because the obvious way to measure this
+## does not work and the next person should not spend an evening rediscovering that.
+##
+## A raft grounded in the shallows is still floating, so the swell moves it more than a shove
+## does. Averaged over four wave phases, from an identical re-settled start, displacement two and
+## a half seconds after the shove came out as:
+## [codeblock lang=text]
+##       0 N   0.271 m   <- no shove at all, the control
+##   20000 N   0.134 m
+##   40000 N   0.112 m
+##   60000 N   0.318 m
+##   90000 N   0.233 m   <- shipped
+##  140000 N   0.333 m
+## [/codeblock]
+## The control out-moves half the shoves, so every row of that table is the sea rather than the
+## push. A number chosen from it would be indistinguishable from a number chosen at random.
+##
+## Two things would have to change to measure it honestly: settle and sample over this project's
+## established windows for settled physics — 25 s and 12 s, not the 12 s and 2.5 s used above —
+## and measure the hull's contact with the bed ENDING rather than a distance, because "did it
+## come off the bottom" is a state change and distance at this scale is swamped by wave orbital
+## motion. Neither is hard; both were skipped to get a working feature in front of a person.
+##
+## 90,000 N is what the user played and accepted. If it ever needs to change, do the measurement
+## properly first rather than nudging this number against the same noise.
+@export_range(0.0, 400000.0, 100.0) var push_force: float = 90000.0
+
+## Rises by one each time a shove is accepted. Replicated, never reset.
+##
+## A serial for the same reason [member stroke_serial] is one: a shove is momentary, and a flag
+## true for a single frame can fall between two synchroniser samples and never be seen.
+var push_serial: int = 0
+
+## Seconds since each pusher's last accepted shove began, by instance id.
+##
+## One clock rather than two, because the shove and the rest that follows it are one gesture:
+## force is applied while this is under [constant PUSH_DURATION], and another shove is refused
+## while it is under [constant PUSH_COOLDOWN]. An entry is dropped once the longer of the two has
+## passed, so the dictionary holds only pushers who are mid-heave or mid-rest.
+var _push_elapsed: Dictionary = {}
+
+## The direction each pusher's shove is committed to, by instance id.
+var _push_direction: Dictionary = {}
+
 ## Rises by one each time a stroke is accepted. Replicated, never reset.
 ##
 ## A serial rather than a flag because a stroke is momentary: a bool set true for one frame can
@@ -105,6 +206,7 @@ func _physics_process(delta: float) -> void:
 		return
 	super(delta)
 	_advance_strokes(delta)
+	_advance_pushes(delta)
 
 
 ## Applies one paddle stroke from [param paddler], and says whether it was allowed.
@@ -143,6 +245,88 @@ func request_stroke(paddler: NetworkPlayer, _side: float = 0.0) -> StrokeResult:
 	stroke_serial += 1
 	thrusting = true
 	return StrokeResult.ACCEPTED
+
+
+## Shoves the raft away from [param pusher], and says whether it was allowed.
+##
+## Server-side by construction, exactly as [method request_stroke] is: the client publishes only
+## a rising count and every condition is tested here. A client cannot submit a direction, a force
+## or a target — only the fact that it asked.
+##
+## [b]The pusher must be OFF the raft.[/b] This is the inverse of a stroke's test rather than an
+## arbitrary restriction: a shove needs something to brace against, and someone standing on the
+## hull braces against the hull, so the force and its reaction cancel through their own feet.
+## Standing on the beach, the reaction goes into the beach and the raft moves.
+##
+## Direction is away from the pusher, flattened to horizontal, and taken at the moment of the
+## shove. Not the raft's forward — a shove is directional from where the pusher stands, which is
+## the whole point of getting off and walking round to the landward side.
+func request_push(pusher: NetworkPlayer) -> PushResult:
+	if not is_multiplayer_authority():
+		return PushResult.NOT_AUTHORITY
+	if pusher == null:
+		return PushResult.NO_FOOTING
+	var footing := pusher.standing_on()
+	# Asking the player rather than re-casting, for the same reason a stroke does: one answer to
+	# "what is this body standing on" per frame, already decided when its stance was.
+	if footing == self:
+		return PushResult.ABOARD
+	if footing == null:
+		return PushResult.NO_FOOTING
+	# Horizontal only, like boarding: the pusher stands on a beach below the deck or a rock above
+	# it, and both are within arm's reach of the hull.
+	var offset := global_position - pusher.global_position
+	var flat := Vector2(offset.x, offset.z)
+	if flat.length() > PUSH_RANGE:
+		return PushResult.OUT_OF_REACH
+	if _push_elapsed.get(pusher.get_instance_id(), PUSH_COOLDOWN) < PUSH_COOLDOWN:
+		return PushResult.COOLING_DOWN
+
+	# Direction is locked in at the shove, like a stroke's arm: if the pusher is knocked aside
+	# mid-push, the effort already committed does not swing round to follow them.
+	var direction := Vector3(flat.x, 0.0, flat.y)
+	if direction.length_squared() <= 0.0:
+		# Standing exactly under the hull's centre in plan view is not a direction. Refused as its
+		# own case rather than as OUT_OF_REACH, which would be a refusal passing for the wrong
+		# reason. The consequence of not refusing is mild but silly: Vector3.ZERO.normalized()
+		# returns zero rather than NaN, so the shove would apply no force while still spending
+		# the cooldown and raising the serial — a press that costs the player their next one.
+		return PushResult.TOO_CLOSE
+	_push_elapsed[pusher.get_instance_id()] = 0.0
+	_push_direction[pusher.get_instance_id()] = direction.normalized()
+
+	push_serial += 1
+	return PushResult.ACCEPTED
+
+
+## Runs the shove clocks down, applying each one's force for as long as it lasts.
+##
+## Applied EVERY physics step for the length of the shove, not once when it is accepted, for the
+## reason [method _advance_strokes] documents: [method RigidBody3D.apply_force] is cleared at the
+## end of the step, so a single call would deliver its force for one tick and nothing after.
+##
+## The force is applied at the hull's centre of mass rather than at the pusher's hands. A shove
+## against a beached raft is a whole-body effort against a hull already resting on something, and
+## an off-centre impulse at this mass spins it instead of freeing it — which reads as the raft
+## refusing to move while slewing sideways.
+func _advance_pushes(delta: float) -> void:
+	if _push_elapsed.is_empty():
+		return
+	# keys() returns a snapshot array, so erasing inside the loop is safe — verified rather than
+	# assumed, as _advance_strokes does the same thing.
+	for id: int in _push_elapsed.keys():
+		var elapsed: float = float(_push_elapsed[id]) + delta
+		if elapsed >= PUSH_COOLDOWN:
+			# The rest is over as well as the heave; this pusher is free to shove again.
+			_push_elapsed.erase(id)
+			_push_direction.erase(id)
+			continue
+		_push_elapsed[id] = elapsed
+		# Force for the heave only. The remainder of the entry's life is the rest that stops a
+		# player tapping the key into a continuous engine.
+		if elapsed < PUSH_DURATION:
+			var direction: Vector3 = _push_direction.get(id, Vector3.ZERO)
+			apply_central_force(direction * push_force)
 
 
 ## Runs the stroke clocks down and drops [member thrusting] when the last one ends.

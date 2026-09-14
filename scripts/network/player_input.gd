@@ -35,6 +35,17 @@ const SLOW_MULTIPLIER: float = 0.35
 ## [method NetworkPlayer._apply_paddling].
 @export var paddle_strokes: int = 0
 
+## How many times the owner has asked to shove the raft off whatever it is stuck on.
+##
+## A running count for the same reason as [member board_requests]: a shove is momentary, and a
+## flag set true for one frame can fall between two synchroniser samples and silently do nothing.
+##
+## Deliberately NOT a hold, unlike [member paddle_strokes]. Paddling repeats because a crossing
+## is made of many strokes; a shove is one committed effort against something solid, and holding
+## G to pump the raft off a beach would read as a cheat rather than as strength. One press, one
+## push, and the raft's own mass decides whether that was enough.
+@export var push_requests: int = 0
+
 ## Local-only camera and capture gate.
 var movement_camera: PlayerCamera
 var controls_enabled: bool = false:
@@ -67,6 +78,8 @@ func _process(delta: float) -> void:
 	wants_sprint = Input.is_action_pressed(&"move_sprint") and not slow
 	if Input.is_action_just_pressed(&"board"):
 		board_requests += 1
+	if Input.is_action_just_pressed(&"push"):
+		push_requests += 1
 	_update_paddle(delta)
 
 

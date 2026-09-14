@@ -423,13 +423,43 @@ Gate: two peers agree on objective/phase, late join initializes correctly, three
 
 ### Phase B — Reliable raft feel
 
-- [ ] **B01 — One paddle action** — `READY FOR USER TEST`  
+- [x] **B01 — One paddle action** — `ACCEPTED`  
 Depends: A04. Validated propulsion and basic feedback; measure force/drag rather than guess units.  
 Gate: host/client see start/stop; off-raft strokes rejected; missing input stops thrust. User starts, turns and stops in test bay.
+
+**Accepted 14 September 2026.** The human clause is met: the user played the raft and reported it feels fine. That is the whole of what was outstanding — the automated clauses had passed since implementation.
 
 **Implemented and verified headlessly 14 September 2026; the human clause is open.** `tools/verify_b01_paddle.gd` proves the automated half over a real loopback session: host and client both see a stroke start and stop, holding repeats one stroke per stroke duration, each request is served exactly once, a burst of five collapses to one, missing input stops thrust with the key still held, a client cannot start a stroke itself, a stroke from the water is refused as `NOT_ABOARD` and does not fire on reboarding, paddling moves the raft further than drift, and strokes from opposite edges turn it opposite ways. `scenes/test_bay.tscn` and `tools/verify_test_bay.gd` add the calm measuring scene the gate names, with its own weather preset because a preset is the only lever on wind.
 
 **Still required to check this box:** a human starting, turning and stopping the raft in the test bay. No one has played it, so the gate's last sentence is unmet and the chunk is not complete. A force measured headlessly is not a raft that feels like anything.
+
+- [x] **B0P — Push the raft off from shore** — `ACCEPTED`  
+Depends: B01. Requested by the user during B01's play test, and scoped by them to the case that
+matters: a raft grounded in the shallows, shoved off by someone standing on the shore. Not in the
+original plan; it belongs to the rocky-passage stop's "grounded raft can be pushed/refloated"
+line in §5, arriving early because a player wanted it.  
+Gate: a shove is server-decided, refused from aboard, refused without footing or reach, refused
+during its own cooldown, and reaches a raft from a client as well as from the host. User pushes
+the raft off.
+
+**Accepted 14 September 2026.** The user played it: "I can push it now." `tools/verify_b06_push.gd`
+holds 13 checks; `verify_multiplayer` drives the client-to-server path over a real session.
+
+Two things this chunk is deliberately honest about, both recorded in the code rather than here:
+
+- **`push_force` is set from play, not measured.** Three observables were tried against a hull
+  grounded in the shallows — distance, distance against a control, peak speed — and none could
+  tell the feature switched on from switched off, because a grounded raft is still afloat and
+  90 kN on 77,760 kg moves it about as much as the swell does. The suite therefore asserts the
+  contract it can prove and prints the motion figures as an informational line asserted by nobody.
+- **A raft fully up on land cannot be shoved at all**, by any force: measured at exactly
+  0.0000 m/s under 500 kN applied sideways and straight up, with the hull embedded in the terrain
+  mesh. That is a collision problem rather than a strength one, and it is out of scope here.
+
+A review by another session caught the defect that mattered: `push_requests` was missing from the
+replicated input list, so a client's key press never reached the server and only the host could
+shove — with the suite green throughout, because every check called the raft directly and none
+travelled the path a player's press takes. Both halves are now guarded.
 
 - [ ] **B02 — Shared paddling**  
 Depends: B01. Two-sided force points, aggregate thrust cap and a few tuning controls.  

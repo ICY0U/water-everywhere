@@ -153,7 +153,7 @@ func _run_checks() -> void:
 	# two checks without updating this number once made the difference negative, which
 	# subtracted from the failure tally, cancelled a genuinely failing check and exited 0 —
 	# turning a red suite green. That is the one outcome worse than a crash reading as a pass.
-	var expected := 22
+	var expected := 23
 	if _reported_checks.size() != expected:
 		printerr(
 			"\n%d of %d checks reported — one did not run to completion."
@@ -571,6 +571,22 @@ func _check_live_controls() -> void:
 		and server_input.board_requests == board_before + 2,
 		"client=%d server=%d (was %d)" % [
 			client_input.board_requests, server_input.board_requests, board_before,
+		])
+
+	# Shoving crosses the same way, and is checked here for a reason worth recording: when the
+	# push action was written, push_requests was left out of PlayerInputReplication entirely. The
+	# host could shove, a client pressing the key did nothing at all, and there was no error —
+	# the push suite was green throughout, because every check in it calls Raft.request_push()
+	# directly and none of them travels the path a player's press actually takes. A config
+	# assertion catches the property going missing; only a live session catches it never arriving.
+	var push_before: int = server_input.push_requests
+	client_input.push_requests += 2
+	await create_timer(0.3).timeout
+	_report("push requests cross as a count, not a pulse",
+		server_input.push_requests == client_input.push_requests
+		and server_input.push_requests == push_before + 2,
+		"client=%d server=%d (was %d)" % [
+			client_input.push_requests, server_input.push_requests, push_before,
 		])
 
 	# Capture release clears held actions immediately, then the reliable update reaches host.

@@ -15,7 +15,7 @@ func _init() -> void:
 	# ON_CHANGE rather than ALWAYS: these change a few times a second at most, where the pose
 	# changes every frame, and a stroke that is missed is not recoverable by the next packet the
 	# way a position is.
-	for property in [".:stroke_serial", ".:thrusting"]:
+	for property in [".:stroke_serial", ".:thrusting", ".:push_serial"]:
 		var path := NodePath(property)
 		replication_config.add_property(path)
 		replication_config.property_set_replication_mode(

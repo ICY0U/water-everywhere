@@ -184,6 +184,9 @@ var _boards_served: int = 0
 ## Value of [member PlayerInput.paddle_strokes] the server has already acted on.
 var _strokes_served: int = 0
 
+## Value of [member PlayerInput.push_requests] the server has already acted on.
+var _pushes_served: int = 0
+
 ## Unbroken seconds a floating player has spent clear of the water: see
 ## [constant FLOAT_EXIT_GRACE].
 var _dry_seconds: float = 0.0
@@ -241,6 +244,7 @@ func _physics_process(delta: float) -> void:
 	# Its own call rather than a branch of _apply_thrust, which returns early for a GROUNDED
 	# player — and a paddler standing on the deck is exactly that.
 	_apply_paddling()
+	_apply_pushing()
 	_apply_swim_balance()
 	_apply_thrust()
 
@@ -528,6 +532,62 @@ func _apply_paddling() -> void:
 	if raft != null and raft.request_stroke(self) == Raft.StrokeResult.COOLING_DOWN:
 		return
 	_strokes_served = _input.paddle_strokes
+
+
+## Serves the shoves this player's owner has asked for, against the raft they are beside.
+##
+## Server-side by construction, like boarding and paddling: the client publishes only a count and
+## [method Raft.request_push] decides every condition.
+##
+## The raft asked is [method _nearest_raft] rather than [method standing_on], which is the
+## opposite of how paddling chooses — and has to be. A pusher is by definition NOT on the raft
+## they are shoving, so asking what they are standing on would find the beach and never a raft.
+##
+## Every request is spent whether or not it shoved, exactly as a refused board request is. A
+## shove asked for out of reach must not sit waiting to fire the moment the player wanders into
+## range: the press meant "now", and "now" has passed.
+func _apply_pushing() -> void:
+	if _input == null or _input.push_requests <= _pushes_served:
+		return
+	_pushes_served = _input.push_requests
+
+	var raft := _nearest_raft_to_push()
+	if raft == null:
+		return
+	raft.request_push(self)
+
+
+## Returns the raft a shove should be aimed at, or null when there is none worth aiming at.
+##
+## [b]Not simply the nearest one.[/b] A pusher standing ON a raft is zero metres from it, so
+## [method _nearest_raft] would always answer with the hull underfoot — and since a shove from
+## aboard is refused, a player standing on raft A could never shove raft B moored beside it, and
+## every press would be spent on a refusal they did not mean. Latent while a scene has one raft;
+## live the moment two are moored together, which is what an island stop looks like.
+##
+## So the raft being stood on is excluded, and one within [constant Raft.PUSH_RANGE] is preferred
+## over a closer one outside it — a pusher between two hulls means the one they can actually
+## reach.
+func _nearest_raft_to_push() -> Raft:
+	var footing := standing_on()
+	var best: Raft = null
+	var best_distance := INF
+	var best_in_range := false
+	for node: Node in get_tree().get_nodes_in_group(&"water_subjects"):
+		var raft := node as Raft
+		if raft == null or raft == footing:
+			continue
+		var offset := raft.global_position - global_position
+		var distance := Vector2(offset.x, offset.z).length()
+		var in_range := distance <= Raft.PUSH_RANGE
+		# A reachable hull always beats an unreachable one, however much closer the second is.
+		if best != null and best_in_range and not in_range:
+			continue
+		if best == null or (in_range and not best_in_range) or distance < best_distance:
+			best = raft
+			best_distance = distance
+			best_in_range = in_range
+	return best
 
 
 ## Returns the nearest [Raft], or null when the scene has none.

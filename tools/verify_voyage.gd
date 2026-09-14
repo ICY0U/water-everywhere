@@ -82,6 +82,13 @@ func _run() -> void:
 	# literal goes stale the moment the binding moves. Asserted against the InputMap for the same
 	# reason the objective above is asserted against the world rather than against another string.
 	var status := game.get_node("HUD/Status") as Label
+	var push_key := _bound_key(&"push")
+	_expect(
+		not push_key.is_empty()
+		and status.text.contains(push_key)
+		and status.text.to_lower().contains("push"),
+		"the HUD names the key that pushes the raft off ('%s')" % push_key
+	)
 	var paddle_key := _bound_key(&"paddle")
 	_expect(
 		not paddle_key.is_empty()

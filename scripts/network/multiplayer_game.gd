@@ -594,7 +594,11 @@ func _refresh_status() -> void:
 ## the objective so that every scene carrying this HUD gets it, not only the voyage.
 func _control_hints() -> PackedStringArray:
 	var hints := PackedStringArray()
-	for control: Array in [[&"board", "board the raft"], [&"paddle", "paddle while aboard"]]:
+	for control: Array in [
+		[&"board", "board the raft"],
+		[&"paddle", "paddle while aboard"],
+		[&"push", "push it off from shore"],
+	]:
 		var key: String = _key_name(control[0])
 		if not key.is_empty():
 			hints.append("%s  %s" % [key, control[1]])

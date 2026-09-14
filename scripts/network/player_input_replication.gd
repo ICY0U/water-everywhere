@@ -8,7 +8,7 @@ func _init() -> void:
 	replication_config = SceneReplicationConfig.new()
 	for property in [
 		"move_direction", "wants_up", "wants_down", "wants_sprint", "board_requests",
-		"paddle_strokes",
+		"paddle_strokes", "push_requests",
 	]:
 		var path := NodePath(".:" + property)
 		replication_config.add_property(path)

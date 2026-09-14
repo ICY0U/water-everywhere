@@ -85,6 +85,7 @@ const SUITES: Array[Dictionary] = [
 	{"name": "voyage", "script": "tools/verify_voyage.gd", "gpu": false},
 	{"name": "paddle", "script": "tools/verify_b01_paddle.gd", "gpu": false},
 	{"name": "test bay", "script": "tools/verify_test_bay.gd", "gpu": false},
+	{"name": "push", "script": "tools/verify_b06_push.gd", "gpu": false},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 
