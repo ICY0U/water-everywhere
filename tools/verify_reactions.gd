@@ -22,6 +22,9 @@ const CONTACT_UNIFORMS: Array[String] = [
 ## includes anyway; this only stops a broken one from hanging the suite.
 const INCLUDE_DEPTH_LIMIT: int = 4
 
+## Shader whose mask terms must stay signed distances; see [method _check_ring_mask].
+const RING_SHADER: String = "res://shaders/impact_foam_ring.gdshader"
+
 var _failures: int = 0
 
 
@@ -31,6 +34,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_check_contact_uniforms()
+	_check_ring_mask()
 
 	var packed := load("res://scenes/ocean_demo.tscn") as PackedScene
 	var demo := packed.instantiate()
@@ -112,6 +116,35 @@ func _check_contact_uniforms() -> void:
 
 ## Returns the source of the shader at [param path] with its [code]#include[/code] files
 ## appended, so a uniform moved into an include is still found.
+## Checks the impact ring's core term is still a signed distance, not one scaled by a fade.
+##
+## [b]This is a source check because the failure is invisible to every other kind.[/b] The ring
+## kept its [member MeshInstance3D.visible] the whole time it was broken, so the live check below
+## passed; the geometry, the pool and the uniforms were all correct. What went wrong was one
+## term's sign. Every term feeding [code]mask[/code] must be positive inside its shape and
+## negative outside, and [code](0.45 - radius) * fade[/code] breaks that: as [code]fade[/code]
+## reaches zero the term reaches zero from either side, so instead of "nowhere near the shape" it
+## reads as "exactly on the edge" across the whole quad. Pinned at zero by the [code]max()[/code],
+## that maps to ALPHA exactly 0.5 — [code]ALPHA_SCISSOR_THRESHOLD[/code] — and a scissored
+## fragment AT the threshold is kept and drawn opaque. Measured: an 18 m quad went from 3% of the
+## frame near-white to 21% at age 0.95, as a hard white slab, then to a starburst once erosion cut
+## direction-space cells out of it. The correct form fades the RADIUS the core reaches
+## ([code]0.45 * fade - radius[/code]), which shrinks the shape and keeps the sign.
+func _check_ring_mask() -> void:
+	var code := _shader_source(RING_SHADER)
+	var core := RegEx.create_from_string(r"float\s+core\s*=\s*([^;]+);").search(code)
+	_check("the ring shader still defines a core term", core != null)
+	if core == null:
+		return
+	var expression := core.get_string(1).strip_edges()
+	# A parenthesised difference multiplied by anything is the shape being scaled toward zero
+	# rather than shrunk, which is exactly the form that loses the sign.
+	var scaled := RegEx.create_from_string(r"\([^()]*-[^()]*\)\s*\*").search(expression) != null
+	_check("its core is a signed distance, not a shape scaled to zero", not scaled)
+	# The radius has to be subtracted at the top level for the term to stay signed.
+	_check("its core subtracts the radius outside any fade", expression.ends_with("- radius"))
+
+
 static func _shader_source(path: String, depth: int = 0) -> String:
 	var code := FileAccess.get_file_as_string(path)
 	if depth >= INCLUDE_DEPTH_LIMIT:

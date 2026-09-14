@@ -27,7 +27,15 @@ void fragment() {
 	float width = mix(0.22, 0.045, age);
 	float outer = width - abs(radius - growth * 0.86);
 	float inner = width * 0.55 - abs(radius - growth * 0.58);
-	float core = (0.45 - radius) * (1.0 - smoothstep(0.0, 0.38, age));
+	// The core SHRINKS rather than fading in place, and every term here must stay a signed
+	// distance: positive inside its shape, negative outside. Scaling one by a fade factor breaks
+	// that, because the factor reaches exactly zero and takes the sign with it — the term then
+	// reads as "exactly on the edge" across the entire quad rather than "nowhere near it". With
+	// max() pinned at 0, the mapping below produces ALPHA exactly 0.5, which is
+	// ALPHA_SCISSOR_THRESHOLD, and a scissored fragment at the threshold is kept and drawn
+	// OPAQUE: the whole 18 m quad turned solid white for the rest of the ring's life, and then
+	// into a starburst as erosion ate direction-space cells out of it.
+	float core = 0.45 * (1.0 - smoothstep(0.0, 0.38, age)) - radius;
 
 	// Direction-space noise has no polar seam and tears the ring into cel-shaped clumps.
 	float breakup = hash21(floor(direction * (7.0 + violence * 9.0) + seed * 31.0));
