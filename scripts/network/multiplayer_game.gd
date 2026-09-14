@@ -567,6 +567,7 @@ func _refresh_status() -> void:
 		offline.append("J  join %s:%d   (host first with H)" % [
 			_join_address(), NetworkSession.port_from_command_line(),
 		])
+		offline.append_array(_control_hints())
 		_status.text = "\n".join(offline)
 		return
 
@@ -582,7 +583,42 @@ func _refresh_status() -> void:
 		lines.append("%s%s" % [marker, NetworkSession.players[id]])
 	if not _status_notice.is_empty():
 		lines.append(_status_notice)
+	lines.append_array(_control_hints())
 	_status.text = "\n".join(lines)
+
+
+## Returns the lines naming the keys that act on the raft, or nothing when none are bound.
+##
+## This HUD is the only place a player is told that Space paddles — nothing else on screen names
+## it, and a control nobody names is a control nobody uses. It sits with the roster rather than in
+## the objective so that every scene carrying this HUD gets it, not only the voyage.
+func _control_hints() -> PackedStringArray:
+	var hints := PackedStringArray()
+	for control: Array in [[&"board", "board the raft"], [&"paddle", "paddle while aboard"]]:
+		var key: String = _key_name(control[0])
+		if not key.is_empty():
+			hints.append("%s  %s" % [key, control[1]])
+	if hints.is_empty():
+		return hints
+	return PackedStringArray(["", "   ".join(hints)])
+
+
+## Returns the name of the first key bound to [param action], or an empty string when none is.
+##
+## Read out of the [InputMap] rather than written into the hint, so a rebinding cannot leave the
+## HUD naming a key that does nothing. Same discipline as asserting the objective against the
+## world instead of against another string.
+func _key_name(action: StringName) -> String:
+	if not InputMap.has_action(action):
+		return ""
+	for event: InputEvent in InputMap.action_get_events(action):
+		var key := event as InputEventKey
+		if key == null:
+			continue
+		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+		if code != KEY_NONE:
+			return OS.get_keycode_string(code)
+	return ""
 
 
 ## Returns what pressing V would switch to, so the hint names the destination rather than the

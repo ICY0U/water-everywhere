@@ -78,6 +78,18 @@ func _run() -> void:
 			else 0.0)
 	)
 
+	# The HUD is the only place a player is told which key paddles, and a hint typed in as a
+	# literal goes stale the moment the binding moves. Asserted against the InputMap for the same
+	# reason the objective above is asserted against the world rather than against another string.
+	var status := game.get_node("HUD/Status") as Label
+	var paddle_key := _bound_key(&"paddle")
+	_expect(
+		not paddle_key.is_empty()
+		and status.text.contains(paddle_key)
+		and status.text.to_lower().contains("paddle"),
+		"the HUD names the key that paddles ('%s')" % paddle_key
+	)
+
 	# A repeated request must not invent a second transition. The plan requires one result from
 	# a duplicate trigger, and the revision is what a joiner uses to order phases.
 	game.begin_voyage()
@@ -197,6 +209,24 @@ func _count_rafts(game: Node) -> int:
 		if child is Raft:
 			found += 1
 	return found
+
+
+## Returns the name of the first key bound to [param action], or "" when none is.
+##
+## Deliberately its own copy rather than a call into [method MultiplayerGame._key_name]: a test
+## that reads the key through the same function the HUD does would still pass if that function
+## returned the wrong name for every action.
+func _bound_key(action: StringName) -> String:
+	if not InputMap.has_action(action):
+		return ""
+	for event: InputEvent in InputMap.action_get_events(action):
+		var key := event as InputEventKey
+		if key == null:
+			continue
+		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+		if code != KEY_NONE:
+			return OS.get_keycode_string(code)
+	return ""
 
 
 func _expect(condition: bool, message: String) -> void:

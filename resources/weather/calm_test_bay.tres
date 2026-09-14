@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="WeatherPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://5oewxqr8l1d" path="res://scripts/weather_preset.gd" id="1_preset"]
+
+[resource]
+script = ExtResource("1_preset")
+display_name = "Calm Test Bay"
+horizon_color = Color(0.784, 0.914, 0.965, 1)
+zenith_color = Color(0.153, 0.451, 0.812, 1)
+sun_glow_color = Color(1, 0.929, 0.706, 1)
+below_horizon_color = Color(0.494, 0.678, 0.769, 1)
+sky_bands = 5
+horizon_falloff = 2.4
+sun_color = Color(1, 0.973, 0.855, 1)
+sun_size = 0.042
+sun_glow_size = 0.5
+sun_glow_bands = 3
+sun_intensity = 7.0
+cloud_lit_color = Color(1, 0.996, 0.976, 1)
+cloud_mid_color = Color(0.898, 0.929, 0.973, 1)
+cloud_shadow_color = Color(0.663, 0.733, 0.851, 1)
+cloud_coverage = 0.34
+cloud_edge = 0.022
+cloud_scale = 2.4
+cloud_speed = 0.01
+cloud_octaves = 4
+cloud_light_wrap = 0.55
+cloud_base_darkening = 0.0
+storm_layer_strength = 0.0
+light_color = Color(1, 0.969, 0.898, 1)
+light_energy = 1.15
+sun_elevation = 52.0
+sun_azimuth = 150.0
+ambient_color = Color(0.435, 0.596, 0.784, 1)
+ambient_energy = 0.35
+ocean_sky_tint = Color(0.643, 0.855, 0.937, 1)
+ocean_shallow_color = Color(0.353, 0.831, 0.847, 1)
+ocean_mid_color = Color(0.11, 0.522, 0.749, 1)
+ocean_deep_color = Color(0.047, 0.216, 0.451, 1)
+ocean_specular_color = Color(1, 0.988, 0.929, 1)
+ocean_specular_strength = 1.4
+ocean_fresnel_strength = 0.18
+fog_enabled = true
+fog_color = Color(0.729, 0.851, 0.925, 1)
+fog_density = 0.0004
+fog_sky_affect = 0.1
+fog_sun_scatter = 0.45
+fog_height = 0.0
+fog_height_density = 0.05
+volumetric_fog_enabled = false
+volumetric_fog_density = 0.0015
+volumetric_fog_albedo = Color(0.816, 0.894, 0.965, 1)
+volumetric_fog_anisotropy = 0.6
+volumetric_fog_length = 180.0
+volumetric_fog_ambient_inject = 0.25
+volumetric_fog_sky_affect = 0.0
+sun_shaft_energy = 6.0
+godray_density = 0.012
+godray_color = Color(0.784, 0.882, 0.965, 1)
+godray_falloff_height = 40.0
+cloud_shadow_amount = 0.9
+cloud_shadow_scale = 90.0
+wind_speed = 8.5
+wave_steepness = 0.35
+whitecap_threshold = 0.99
+foam_persistence = 0.55

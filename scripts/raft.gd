@@ -37,22 +37,39 @@ const SPAWN_OFFSETS: Array[Vector2] = [
 
 ## Force one stroke delivers, in newtons, at the blade.
 ##
-## [b]A stroke is meant to be a nudge, and this value is deliberate — do not "fix" it.[/b] One
-## stroke turns the loaded raft about 0.031 degrees, which is mechanically correct and humanly
-## imperceptible. That is the design: wind and waves are the forces that move this vessel, and
-## paddling only trims it at the margin.
+## [b]Set from play, against a raft whose mass was corrected first.[/b]
 ##
-## Measured on the voyage raft (108,864 kg, wind zeroed, settled between trials), yaw over ten
-## strokes from one side:
+## The first playtest ran at 1,200 N against a 108,864 kg raft and the verdict was that it "is
+## not moving at all" — at that mass a believable stroke reads to a player as a broken control.
+## The reflex is to raise this number, and that road ends at 120,000 N: twelve tonnes from one
+## paddler, a heavy raft pretending to be a light one.
+##
+## The actual fault was the raft's mass, and the lever is [member BuoyantBody.body_density], NOT
+## the hull's size. [code]mass = body_density * hull.volume[/code], and density is the half of
+## that product that touches no geometry: equilibrium submersion is about density/1025 whatever
+## the shape, so lowering it makes the hull ride higher without moving the deck relative to the
+## waterline. Thinning the hull moves both, which breaks freeboard and boarding.
+##
+## [code]raft.tscn[/code] now carries density 300 rather than 420 — waterlogged timber and
+## barrels rather than seasoned oak — for 77,760 kg.
+##
+## Measured in the test bay, two crew aboard, ten strokes from one side, at 30,000 N:
 ## [codeblock lang=text]
-##   1,200 N   -0.39 deg    <- this value; below the raft's own residual drift
-##   6,000 N   -1.89 deg
-##  20,000 N   -6.54 deg    barely felt
-##  60,000 N  -15.61 deg    usable, and physically absurd: six tonnes from one paddler
+##  density 420  108,864 kg    7.5 deg   1.65 m   the original; played, felt like nothing
+##  density 300   77,760 kg   13.2 deg   2.33 m   <- shipped
+##  density 250   64,800 kg   ~20  deg            fails verify_test_island's trough check
+##  density 200   51,840 kg   25.3 deg   3.20 m   fails trough AND draught
 ## [/codeblock]
 ## Symmetry is exact once the raft is settled (-9.101 against +9.095 at matched force), so a
 ## reading that says otherwise is an unsettled rig rather than a torque bug.
-@export_range(0.0, 20000.0, 10.0) var stroke_force: float = 1200.0
+##
+## [b]300 is the lightest density that keeps every existing suite green, and that is why it is
+## here.[/b] Below it [code]verify_test_island[/code] goes red on constants documented against a
+## 420 kg/m³ hull — a trough floor, a draught tolerance and a floating minimum. Those constants
+## are arguably stale rather than right, but a lighter raft is not worth editing three thresholds
+## in someone else's suite to accommodate. If this raft ever needs to be lighter, derive those
+## bands from the density instead of widening them.
+@export_range(0.0, 200000.0, 10.0) var stroke_force: float = 30000.0
 
 ## How far out from the centreline a stroke bites, in metres.
 ##

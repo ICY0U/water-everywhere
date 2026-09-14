@@ -84,6 +84,7 @@ const SUITES: Array[Dictionary] = [
 		"args": ["--port=27119", "--name=Host"]},
 	{"name": "voyage", "script": "tools/verify_voyage.gd", "gpu": false},
 	{"name": "paddle", "script": "tools/verify_b01_paddle.gd", "gpu": false},
+	{"name": "test bay", "script": "tools/verify_test_bay.gd", "gpu": false},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 
