@@ -36,6 +36,36 @@ const SUPPORT_REACH: float = 0.18
 ## Vertical thrust per unit mass, for rising and diving.
 const VERTICAL_THRUST_PER_MASS: float = 9.0
 
+## How hard a swimmer holds their head above their feet, in newton-metres per kg*m^2 of inertia.
+##
+## Something has to, because nothing in the water will. The player's hull is a 1.55 x 4.125 x
+## 1.55 m box of uniform density, and a tall box of uniform density floats on its side: its
+## buoyancy acts through the centre of the submerged part, which sits directly above the centre
+## of mass while upright, so there is no righting moment at all and the smallest wave rolls it
+## flat. Measured before this servo existed, a player left to settle in open water sat at a mean
+## of 94 degrees from upright — face down, with the treading-water clip playing perfectly on a
+## body lying across the surface.
+##
+## Read it as the swimmer's own effort rather than as a correction hidden from the physics: it
+## is scaled by [method BuoyantBody.submersion], so it exists only while there is water to swim
+## in and fades out as the player leaves it, and it never touches where the body is going.
+##
+## [b]Tuned against the waves, not guessed.[/b] The response is sharply non-linear, because the
+## servo is competing with wave torque rather than with still water. Settled 25 s and sampled
+## 12 s, mean tilt from upright came out at: 11 spring, 54 degrees — collapsed, still swimming on
+## its side; 18, 2.9 degrees in the sunny sea and 13.4 degrees (peaking at 35) in the stormy one;
+## 26, 1.2 degrees, upright enough that the swell stops reading at all. 18 sits above the
+## collapse with margin and still lets a storm throw the swimmer around.
+const SWIM_UPRIGHT_SPRING: float = 18.0
+
+## Damping on the swimmer's upright servo, in newton-metres per kg*m^2 per radian/second.
+##
+## Sized against [constant SWIM_UPRIGHT_SPRING] for a damping ratio around 0.8 at rest: a swimmer
+## rolled by a wave comes back up once rather than rocking about it, while the swell still moves
+## them. Rigid is the other failure, and a swimmer nailed to vertical looks worse than one lying
+## flat — it stops looking like water.
+const SWIM_UPRIGHT_DAMPING: float = 7.0
+
 ## How far from the raft's centre a player can be and still climb aboard, in metres.
 ##
 ## The hull is 9 by 9.6 m, so this reaches a couple of metres past the gunwale: far enough to
@@ -123,10 +153,11 @@ const FLOAT_EXIT_GRACE: float = 1.0
 		player_color = value
 		_apply_color()
 
-## Whether the upright servo keeps a supported player standing.
+## Whether the upright servo keeps a player standing, on a deck or in the water.
 ##
-## Off, nothing rights the body: it topples under its own walking force, which is the raw
-## behaviour a balance servo exists to hide. Worth seeing when tuning how a walk feels.
+## Off, nothing rights the body: ashore it topples under its own walking force, and afloat it
+## rolls flat like the tall box it is. That is the raw behaviour a balance servo exists to hide,
+## and it is worth seeing when tuning either one.
 @export var balance_enabled: bool = true
 
 ## Diagnostic switch for the old off-centre thrust. Keep off for normal locomotion:
@@ -210,6 +241,7 @@ func _physics_process(delta: float) -> void:
 	# Its own call rather than a branch of _apply_thrust, which returns early for a GROUNDED
 	# player — and a paddler standing on the deck is exactly that.
 	_apply_paddling()
+	_apply_swim_balance()
 	_apply_thrust()
 
 
@@ -365,6 +397,33 @@ func _apply_deck_movement() -> bool:
 		if balance_enabled:
 			support.apply_torque(-balance)
 	return true
+
+
+## Holds a swimming player upright in the water, so the swim clip is seen the way it was posed.
+##
+## The same servo the deck uses, at gentler gains and scaled by how much of the body is actually
+## in the water: see [constant SWIM_UPRIGHT_SPRING] for why a floating player needs one at all.
+## Only pitch and roll are corrected. Which way a swimmer faces is presentation —
+## [CharacterVisual] yaws the model toward its travel — so torquing the hull's yaw would fight
+## nothing and spend the servo's authority on the one axis that does not matter.
+##
+## Server-side like every other force here: it runs inside the authority-only half of
+## [method _physics_process], and remote peers see the result through the replicated transform
+## rather than deriving it, so nobody floats upright on one screen and face down on another.
+func _apply_swim_balance() -> void:
+	if not balance_enabled or stance != Stance.FLOATING:
+		return
+	var wet := submersion()
+	if wet <= 0.0:
+		return
+	# global_basis.y.cross(UP) is the axis that rotates the body's up onto the world's, scaled by
+	# the sine of the angle between them: zero when upright, strongest lying flat.
+	var righting := global_basis.y.cross(Vector3.UP) * SWIM_UPRIGHT_SPRING
+	var spin := angular_velocity - Vector3.UP * angular_velocity.dot(Vector3.UP)
+	# Scaled by the real inertia for the same reason the deck servo is: torque works against
+	# inertia, which grows with the square of size, so a per-mass coefficient weakens as the
+	# character scales and the servo quietly stops holding.
+	apply_torque((righting - spin * SWIM_UPRIGHT_DAMPING) * _upright_inertia() * wet)
 
 
 ## Returns the body's rotational inertia about a horizontal axis, in kg*m^2.

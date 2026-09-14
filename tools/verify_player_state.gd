@@ -56,6 +56,15 @@ const OPEN_WATER: float = 120.0
 ## Height the player is lifted to for the airborne check, in metres.
 const SKY_HEIGHT: float = 60.0
 
+## Worst tilt from upright a floating player may reach, in degrees.
+##
+## Between the two behaviours it has to tell apart, and near neither. Held upright by
+## [method NetworkPlayer._apply_swim_balance] the body peaks at 6 degrees in this sea and 35 in
+## the stormy preset; with nothing righting it, it lies flat — 94 degrees on average and 131 at
+## worst, which is the bug this guards: the treading-water clip playing on a body face down in
+## the water.
+const UPRIGHT_TOLERANCE_DEGREES: float = 45.0
+
 var _failures: int = 0
 
 
@@ -134,6 +143,17 @@ func _run() -> void:
 		"and stays there as the waves pass",
 		int(afloat["changes"]) == 0,
 		"%d stance changes in %.0f s" % [afloat["changes"], WATCH_SECONDS]
+	)
+	# The clip is only half of "the player is swimming": it is posed upright, so the body under it
+	# has to be. Nothing in the water does that on its own — see
+	# [constant NetworkPlayer.SWIM_UPRIGHT_SPRING] — and the stance checks above all passed while
+	# the character floated face down.
+	_check(
+		"and floats upright rather than face down",
+		float(afloat["tilt_max"]) < UPRIGHT_TOLERANCE_DEGREES,
+		"worst tilt %.1f deg, of %.0f allowed" % [
+			afloat["tilt_max"], UPRIGHT_TOLERANCE_DEGREES
+		]
 	)
 	# The measurement the grace period is sized against, reported whether or not it passes. A
 	# floating player really does leave the water — the troughs reach submersions no threshold can
@@ -223,12 +243,16 @@ func _watch(player: NetworkPlayer) -> Dictionary:
 	var greatest := -INF
 	var dry_run := 0
 	var longest_dry := 0
+	var steepest := 0.0
 
 	for _step: int in steps:
 		await physics_frame
 		if player.stance != previous:
 			changes += 1
 			previous = player.stance
+		# Sampled every frame like the submersion, and for the same reason: a body rolled flat by
+		# one wave and back by the next reads as perfectly upright if you only look at the end.
+		steepest = maxf(steepest, rad_to_deg(player.global_basis.y.angle_to(Vector3.UP)))
 		var wet := player.submersion()
 		least = minf(least, wet)
 		greatest = maxf(greatest, wet)
@@ -245,6 +269,7 @@ func _watch(player: NetworkPlayer) -> Dictionary:
 		"submersion_min": least,
 		"submersion_max": greatest,
 		"longest_dry_seconds": float(longest_dry) / float(Engine.physics_ticks_per_second),
+		"tilt_max": steepest,
 	}
 
 
