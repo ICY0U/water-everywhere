@@ -8,7 +8,7 @@ foam, and crisp specular blobs instead of smooth PBR gradients.
 
 
 
-The production plan, its chunk-by-chunk gates and the evidence behind each completed chunk are in
+Building and shipping the demo is in [RELEASE.md](RELEASE.md). The production plan, its chunk-by-chunk gates and the evidence behind each completed chunk are in
 [GAME_PLAN.md](GAME_PLAN.md) and [planning/](planning/).
 
 ![sea level](docs/sea_level.png)
@@ -16,8 +16,9 @@ The production plan, its chunk-by-chunk gates and the evidence behind each compl
 ## Running it
 
 Open the project in Godot 4.7 and press **F5** to play `scenes/voyage.tscn`, the short
-crossing. It starts offline with no one in the world yet: press **H** to host — playing alone is a
-session of one — and you arrive ashore on the home island. The barrel raft is moored off its
+crossing. It opens on a title menu: **Play** starts a solo game (a session of one, bound to
+the local machine so no firewall prompt), **Play with friends** hosts or joins, and you arrive
+ashore on the home island. The barrel raft is moored off its
 beach and the mainland's mountains rise 300 m to the west. Board the raft, paddle it across, and
 step ashore on the mainland to finish the run; **R** starts a fresh one.
 
@@ -47,9 +48,8 @@ Or launch directly:
 | `G` | shove the raft off the shallows, from the shore beside it — not from aboard |
 | `R` | restart the run (host only) |
 | `1` `2` `3` / `C` | sunny / overcast / stormy / cycle — applies to **everyone** |
-| `P` | pause (offline only) |
-| `F1` | debug panel |
-| `Esc` / left click | release the mouse and stop moving / resume control |
+| `Esc` | menu: resume, restart, settings, quit — pauses a solo game |
+| `F1` | debug panel (editor and debug exports only) |
 | `Ctrl` + `Q` | quit |
 
 ## Multiplayer

@@ -1,1 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="124" height="124" x="2" y="2" fill="#363d52" stroke="#212532" stroke-width="4" rx="14"/><g fill="#fff" transform="translate(12.322 12.322)scale(.101)"><path d="M105 673v33q407 354 814 0v-33z"/><path fill="#478cbf" d="m105 673 152 14q12 1 15 14l4 67 132 10 8-61q2-11 15-15h162q13 4 15 15l8 61 132-10 4-67q3-13 15-14l152-14V427q30-39 56-81-35-59-83-108-43 20-82 47-40-37-88-64 7-51 8-102-59-28-123-42-26 43-46 89-49-7-98 0-20-46-46-89-64 14-123 42 1 51 8 102-48 27-88 64-39-27-82-47-48 49-83 108 26 42 56 81zm0 33v39c0 276 813 276 814 0v-39l-134 12-5 69q-2 10-14 13l-162 11q-12 0-16-11l-10-65H446l-10 65q-4 11-16 11l-162-11q-12-3-14-13l-5-69z"/><path d="M483 600c0 34 58 34 58 0v-86c0-34-58-34-58 0z"/><circle cx="725" cy="526" r="90"/><circle cx="299" cy="526" r="90"/></g><g fill="#414042" transform="translate(12.322 12.322)scale(.101)"><circle cx="307" cy="532" r="60"/><circle cx="717" cy="532" r="60"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Water EveryWhere: a raft on a banded cel sea under a low sun. -->
+  <defs>
+    <clipPath id="tile"><rect x="2" y="2" width="124" height="124" rx="22"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="0" y="0" width="128" height="128" fill="#8fd0f0"/>
+    <rect x="0" y="0" width="128" height="34" fill="#6fb9e6"/>
+    <circle cx="92" cy="40" r="17" fill="#fff4c9"/>
+    <path d="M0 62 Q16 54 32 62 T64 62 T96 62 T128 62 V128 H0 Z" fill="#1c9fd0"/>
+    <path d="M0 80 Q16 72 32 80 T64 80 T96 80 T128 80 V128 H0 Z" fill="#1483b8"/>
+    <path d="M0 100 Q16 92 32 100 T64 100 T96 100 T128 100 V128 H0 Z" fill="#0d6597"/>
+    <path d="M18 66 Q28 62 38 66" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M82 86 Q92 82 102 86" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+    <!-- raft -->
+    <path d="M30 74 L98 74 L92 86 L36 86 Z" fill="#8a3b1f"/>
+    <rect x="30" y="70" width="68" height="6" rx="2" fill="#b4562d"/>
+    <line x1="47" y1="70" x2="47" y2="84" stroke="#6b2c16" stroke-width="2"/>
+    <line x1="64" y1="70" x2="64" y2="84" stroke="#6b2c16" stroke-width="2"/>
+    <line x1="81" y1="70" x2="81" y2="84" stroke="#6b2c16" stroke-width="2"/>
+    <!-- paddle -->
+    <line x1="58" y1="44" x2="72" y2="92" stroke="#f0c77a" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="73" cy="95" rx="5" ry="8" fill="#f0c77a" transform="rotate(-16 73 95)"/>
+  </g>
+  <rect x="2" y="2" width="124" height="124" rx="22" fill="none" stroke="#0b3a57" stroke-width="4"/>
+</svg>

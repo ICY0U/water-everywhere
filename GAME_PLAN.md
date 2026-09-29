@@ -772,17 +772,28 @@ each now guarded in `verify_voyage.gd` by a check proven to fail before the fix 
 - **A reset stacked every player on one spot** (0.00 m apart, then shoved to 1.53 m by the
   solver), because the spawn slot was the body count and during a reset every body exists.
 
-**Open decision — the crossing is too long for a demo.** Measured with one paddler steering by
-switching sides, sunny sea, from the new mooring (`linear_damping_rate` on the raft):
+**Crossing length — decided: a faster raft, same 300 m layout.** Measured with one paddler
+steering by switching sides, sunny sea, from the new mooring until the raft grounds in the
+mainland's shallows (~104 m from its centre, where the last metres are waded):
 
-| Damping | Top speed | Reaches the mainland beach |
-|---|---|---|
-| 1.1 (current, accepted in B01) | ~0.35 m/s sustained | not within 25 minutes (103 m short) |
-| 0.6 (the `BuoyantBody` default) | ~0.64 m/s | 18.6 minutes |
-| 0.3 | ~1 m/s | 11.7 minutes |
+| Raft `linear_damping_rate` | Solo crossing |
+|---|---|
+| 1.1 (the B01 tuning, still used by the test bay) | 23.0 minutes |
+| 0.3 | 6.1 minutes |
+| **0.15 (voyage only)** | **4.8 minutes** |
 
-The linear damping term, not the stroke, sets the ceiling: 30 kN against 1.1 x 77,760 kg per m/s
-is 0.35 m/s. Faster paddling changes the feel B01 accepted, and a shorter crossing changes the
-A04 layout, so neither is changed here; the 300 m distance was always "a first guess, to be set
-from measured raft speed once B01 gives the raft a speed", and this is that measurement.
+The linear damping term, not the stroke, set the ceiling: 30 kN against 1.1 x 77,760 kg per m/s is
+0.35 m/s. The user chose "only a faster raft" over moving the mainland, so the voyage's raft
+instance overrides the damping to 0.15 and every other scene keeps B01's accepted feel. Lower
+is not better: 0.05 took longer (harder to hold a heading). An earlier table here measured to a
+line inside the shallows and counted minutes of grinding as crossing time; this one does not.
+**B01's feel should be re-judged on the voyage raft**, since it now coasts for several seconds.
 
+### Demo 0.1.0 front end (29 September 2026)
+
+For a public Windows build, solo first: a title menu (Play, Play with friends, Settings, Quit),
+Esc menu that pauses a solo world, persisted settings, an end screen with the crossing time, a
+contextual hint line, and the F1 panel restricted to debug builds. Solo binds to loopback so
+Windows asks no firewall question. Guarded in `verify_voyage.gd`; the whole journey is played
+through the real buttons and keys by `tools/capture_voyage.gd`. Release steps and the smoke test
+for the exported zip are in [RELEASE.md](RELEASE.md).
