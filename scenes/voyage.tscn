@@ -187,7 +187,7 @@ peak_breadth = 0.58
 peak_seed = 5
 
 [node name="Raft" parent="." node_paths=PackedStringArray("ocean") instance=ExtResource("20_raft")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -46, -0.6, 0)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -52, -0.6, 0)
 ocean = NodePath("../Ocean")
 
 [node name="Players" type="Node3D" parent="."]

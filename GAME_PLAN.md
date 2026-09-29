@@ -1,7 +1,7 @@
 # Water EveryWhere — Game Design and Testable Production Plan
 
 **Revision:** 2 • 13 September 2026  
-**Status:** production plan in progress. A01-A04 complete: baseline captured, the one failing suite fixed, a Windows build exported and verified, and a voyage scene with an authoritative run phase added. B01 propulsion is implemented and verified headlessly but its human gate is open, so it is `READY FOR USER TEST` rather than complete. **17/17 suites now pass.** See [A01](planning/A01_BASELINE.md), [A02a](planning/A02A_REMOTE_INPUT_FIX.md) and [A03/A04](planning/A03_A04_EXPORT_AND_VOYAGE.md).  
+**Status:** production plan in progress. A01-A04 complete: baseline captured, the one failing suite fixed, a Windows build exported and verified, and a voyage scene with an authoritative run phase added. B01 and B0P are accepted. **All 18 suites pass**, on Windows and — since 29 September, with the runner naming each platform's GPU driver — on Linux under `xvfb-run`. See [A01](planning/A01_BASELINE.md), [A02a](planning/A02A_REMOTE_INPUT_FIX.md) and [A03/A04](planning/A03_A04_EXPORT_AND_VOYAGE.md).  
 **Name:** Water EveryWhere. Retire the old working title “Lost at Sea” in future product-facing work.  
 **Platform:** Windows PC first; existing Godot/Jolt/cel-shaded foundation.  
 **Players:** tune for 3–4; support and qualify 2–8. Solo is initially a development mode, not a launch promise.  
@@ -750,3 +750,39 @@ Fixed alongside, outside the chunk list, from a human play report and a bug the 
 
 - **The character floated face down.** The swim clip was playing correctly the whole time; the body was a tall uniform-density box, which floats on its side like a log, at a measured mean of 94 degrees from upright. A submersion-scaled upright servo holds a swimmer at 2.9 degrees in a calm sea and 13.4 in a storm, and `verify_player_state.gd` now guards it.
 - **Impacts painted a white slab on the sea.** One term in the impact-ring shader was a shape scaled by a fade rather than a signed distance, so it landed every fragment exactly on `ALPHA_SCISSOR_THRESHOLD`, which draws opaque. Measured at a raft-sized impact: 21.07% of frame near-white before, 3.13% after. `verify_reactions.gd` now guards the shader source, because the ring kept its `visible` flag throughout the bug and every live check passed on the broken version.
+
+### Demo-readiness pass on the voyage (29 September 2026)
+
+The main scene was rendered and played through for the first time from a player's seat
+(`tools/capture_voyage.gd`, which presses the real keys) and measured headlessly. Four defects,
+each now guarded in `verify_voyage.gd` by a check proven to fail before the fix and pass after:
+
+- **The raft started aground.** It was placed with its hull bottom 1.8 m down where the seabed is
+  1.1 to 2.0 m down, so it began inside the terrain and was pushed up onto the slope. One paddler
+  holding Space for ten simulated minutes moved it 5.3 m. It is now moored 52 m out, past the
+  drop-off, and a contact check asserts it never touches the island.
+- **The raft pointed north; the objective says west.** Strokes drive along the bow, so a player's
+  first job was turning it round at about 1.3 degrees a stroke. Moored bow-west, and a reset now
+  restores the full transform instead of zeroing the rotation.
+- **The crew started on the far side of the island, looking away.** The raft was 58 m off behind
+  the crest and neither it nor the mountains was on screen. The crew now starts on the raft's
+  side and the view opens, spawns and resets facing the mainland — the first frame of play shows
+  the raft below and the mountains beyond. This is what the open A04 test "user identifies home
+  within 30 seconds" needs; the test itself is still a human's to run.
+- **A reset stacked every player on one spot** (0.00 m apart, then shoved to 1.53 m by the
+  solver), because the spawn slot was the body count and during a reset every body exists.
+
+**Open decision — the crossing is too long for a demo.** Measured with one paddler steering by
+switching sides, sunny sea, from the new mooring (`linear_damping_rate` on the raft):
+
+| Damping | Top speed | Reaches the mainland beach |
+|---|---|---|
+| 1.1 (current, accepted in B01) | ~0.35 m/s sustained | not within 25 minutes (103 m short) |
+| 0.6 (the `BuoyantBody` default) | ~0.64 m/s | 18.6 minutes |
+| 0.3 | ~1 m/s | 11.7 minutes |
+
+The linear damping term, not the stroke, sets the ceiling: 30 kN against 1.1 x 77,760 kg per m/s
+is 0.35 m/s. Faster paddling changes the feel B01 accepted, and a shorter crossing changes the
+A04 layout, so neither is changed here; the 300 m distance was always "a first guess, to be set
+from measured raft speed once B01 gives the raft a speed", and this is that measurement.
+

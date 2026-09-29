@@ -229,6 +229,22 @@ func follow(body: Node3D) -> void:
 		input.controls_enabled = _mouse_captured and not input_blocked
 
 
+## Turns the view to look along [param direction], keeping the horizon level.
+##
+## For a scene that knows where the player ought to be looking before the mouse has said
+## anything: the voyage opens facing its destination, so the first thing on screen is the place
+## the objective names. Only the heading changes. Pitch is kept, and the mouse is free to move
+## either straight afterwards. Steering follows the view, so W then heads the same way.
+func face(direction: Vector3) -> void:
+	var flat := Vector2(direction.x, direction.z)
+	if flat.length_squared() < 0.0001:
+		return
+	# The rig looks down its own -Z: rotating -Z by a yaw y gives (-sin y, -cos y), so the yaw
+	# that points it along the direction is atan2(-x, -z).
+	_yaw = atan2(-flat.x, -flat.y)
+	global_transform.basis = Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
+
+
 ## Returns the body being followed, or null.
 func target() -> Node3D:
 	return _target
