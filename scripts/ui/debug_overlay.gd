@@ -49,6 +49,11 @@ func _process(delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
+		# A release export has no diagnostic panel to open: it can move players and switch off
+		# balance, which is a developer's tool, not a player's. The frame-rate badge stays, and
+		# the game's Settings page decides whether it shows.
+		if event.keycode == KEY_F1 and not OS.is_debug_build():
+			return
 		if event.keycode == KEY_F1 or (is_open and event.keycode == KEY_ESCAPE):
 			set_open(not is_open)
 			get_viewport().set_input_as_handled()

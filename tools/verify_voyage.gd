@@ -99,6 +99,24 @@ func _run() -> void:
 			_view_error(camera, game.mainland.global_position))
 	)
 
+	# --- Front end ----------------------------------------------------------------------
+	# A public build opens on a title screen, not on a developer's key list over an empty world.
+	# Untyped on purpose: naming GameMenu here compiles it before the autoload it uses exists,
+	# the --script trap tools/verify_session_identity.gd documents.
+	var menu: Control = game.menu()
+	_expect(
+		menu != null and menu.is_blocking() and menu.get_node("WaterTitle").visible,
+		"the game opens on its title screen"
+	)
+	_expect(
+		not (game.get_node("HUD/Status") as Label).visible,
+		"the title screen is not drawn over by the HUD"
+	)
+	_expect(
+		menu.find_child("Play", true, false) is Button,
+		"the title screen offers Play"
+	)
+
 	# --- Phase and objective -------------------------------------------------------------
 	_expect(director.phase == RunDirector.Phase.LOBBY, "a fresh scene starts in LOBBY")
 	_expect(director.revision == 0, "a fresh run starts at revision 0")
@@ -227,6 +245,12 @@ func _run() -> void:
 	guest_body.position = game.mainland.global_position + Vector3(0, 20, 0)
 	await _wait_physics(1.0)
 	_expect(director.phase == RunDirector.Phase.ARRIVAL, "reaching the mainland ends the run")
+	var arrival_panel := menu.get_node("ArrivalPanel") as Control
+	_expect(
+		arrival_panel.visible and (arrival_panel.find_child("Time", true, false) as Label).text
+			.begins_with("Crossing time"),
+		"reaching the mainland shows the end screen with the crossing time"
+	)
 	var arrival_revision := director.revision
 	await _wait_physics(0.6)
 	_expect(
@@ -250,6 +274,8 @@ func _run() -> void:
 		host_body.global_position = game.mainland.global_position + Vector3(0.0, 30.0, 40.0)
 		camera.face(Vector3.RIGHT)
 		game.reset_run()
+		if pass_index == 0:
+			_expect(not menu.is_blocking(), "sailing again takes the crew off the end screen")
 		# Measured where the reset PUT them, before a physics step. Every body used to be sent to
 		# the same spot — the spawn slot was the number of bodies, and during a reset every body
 		# already exists, so each was given the same answer — and the solver then shoved the pair

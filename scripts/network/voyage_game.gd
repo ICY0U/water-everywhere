@@ -37,7 +37,24 @@ const SPAWN_SPACING: float = 2.6
 
 @onready var _director: RunDirector = $RunDirector
 
+## Seconds between refreshes of the hint line. It reads a few distances; a frame is too often.
+const HINT_INTERVAL: float = 0.25
+
+## Strokes after which the steering tip has done its job and the hint line clears.
+const STEERING_TIP_STROKES: int = 12
+
 var _arrival_elapsed: float = 0.0
+var _hint_elapsed: float = 0.0
+
+## Seconds this peer has spent in the current crossing, for the end screen. Counted locally in
+## [method _process], so a paused solo game does not count the pause.
+var _crossing_seconds: float = 0.0
+
+## The front end: title, pause, settings and arrival screens. See [GameMenu].
+var _menu: GameMenu
+
+## One line near the bottom of the screen saying what to do next. See [method _hint_text].
+var _hint: Label
 
 
 func _ready() -> void:
@@ -45,14 +62,27 @@ func _ready() -> void:
 	_director.phase_changed.connect(_on_phase_changed)
 	_director.run_reset.connect(_on_run_reset)
 	_face_destination(_camera.global_position)
+	_build_hint()
+	_menu = GameMenu.new()
+	_menu.name = "GameMenu"
+	_menu.game = self
+	_menu.screen_changed.connect(func(_blocking: bool) -> void:
+		_refresh_status()
+		_refresh_hint())
+	$HUD.add_child(_menu)
 	# The objective belongs on screen from the first frame, not from the first phase change.
 	_refresh_status()
 
 
 func _process(delta: float) -> void:
 	super(delta)
+	_hint_elapsed += delta
+	if _hint_elapsed >= HINT_INTERVAL:
+		_hint_elapsed = 0.0
+		_refresh_hint()
 	if _director.phase != RunDirector.Phase.VOYAGE:
 		return
+	_crossing_seconds += delta
 	if not _is_run_authority():
 		return
 	_arrival_elapsed += delta
@@ -114,7 +144,16 @@ func reset_run() -> void:
 	begin_voyage()
 
 
+## Returns the front end, so tests and tools can drive it through its own buttons.
+func menu() -> GameMenu:
+	return _menu
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	# A key pressed on a menu is a key pressed on the menu. H on the title screen used to start a
+	# session behind it, and R on the end screen would restart under the player's cursor.
+	if _menu != null and _menu.is_blocking():
+		return
 	super(event)
 	var key := event as InputEventKey
 	if key == null or not key.is_pressed() or key.echo:
@@ -207,7 +246,11 @@ func _on_session_started(as_server: bool) -> void:
 		begin_voyage()
 
 
-func _on_phase_changed(_phase: RunDirector.Phase, _revision: int) -> void:
+func _on_phase_changed(phase: RunDirector.Phase, _revision: int) -> void:
+	if phase == RunDirector.Phase.VOYAGE:
+		_crossing_seconds = 0.0
+	elif phase == RunDirector.Phase.ARRIVAL and _menu != null:
+		_menu.show_arrival(_crossing_seconds, _is_run_authority())
 	_refresh_status()
 
 
@@ -215,6 +258,9 @@ func _on_run_reset(_epoch: int) -> void:
 	# Every peer hears the reset, so each crew member is turned back toward the mainland. Seen
 	# from the home island, where the reset is returning them, not from where they stand now.
 	_face_destination(home.global_position if home != null else _camera.global_position)
+	# Every peer is taken off the end screen, host or not: the new crossing has begun.
+	if _menu != null and _menu.is_blocking():
+		_menu.close()
 	_refresh_status()
 
 
@@ -246,9 +292,93 @@ func _anyone_ashore() -> bool:
 
 
 func _refresh_status() -> void:
-	super()
 	if _status == null or _director == null:
 		return
-	# Appended rather than replacing the roster text, so the objective is added to what the
-	# base class already renders instead of competing with it for the same label.
-	_status.text = "%s\n\n%s" % [_status.text, _director.objective()]
+	if not NetworkSession.is_active():
+		# Offline, behind the title screen, or a launch that is still finding its server: the
+		# base class's panel says how to start, and the objective follows it.
+		super()
+		_status.text = "%s\n\n%s" % [_status.text, _director.objective()]
+	else:
+		# In play the panel is the objective and the keys that act on the raft. Peer numbers and
+		# a roster of one are for the developer; a crew of several is named so it knows itself.
+		var lines := PackedStringArray()
+		if NetworkSession.players.size() > 1:
+			var names := PackedStringArray()
+			var ids := NetworkSession.players.keys()
+			ids.sort()
+			for id: int in ids:
+				names.append(NetworkSession.players[id])
+			lines.append("Crew: %s" % ", ".join(names))
+		if not _status_notice.is_empty():
+			lines.append(_status_notice)
+		lines.append(_director.objective())
+		lines.append_array(_control_hints())
+		_status.text = "\n".join(lines)
+	_status.visible = _menu == null or not _menu.is_blocking()
+
+
+func _build_hint() -> void:
+	_hint = Label.new()
+	_hint.name = "Hint"
+	_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_hint.offset_left = -520.0
+	_hint.offset_right = 520.0
+	_hint.offset_top = -120.0
+	_hint.offset_bottom = -64.0
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint.add_theme_font_size_override("font_size", 24)
+	_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_hint.add_theme_constant_override("outline_size", 8)
+	$HUD.add_child(_hint)
+
+
+func _refresh_hint() -> void:
+	if _hint == null:
+		return
+	_hint.text = "" if _menu != null and _menu.is_blocking() else _hint_text()
+
+
+## Returns what this player should do next, or an empty string when they know.
+##
+## Derived on each peer from state it already has — its own body's replicated position and
+## stance, the raft's position, its own paddle count — so no hint ever crosses the network and a
+## client sees the same guidance as the host. "Aboard" is judged by position in the raft's own
+## frame rather than by [method NetworkPlayer.standing_on], which only the server can answer.
+func _hint_text() -> String:
+	if _director.phase != RunDirector.Phase.VOYAGE or raft == null or mainland == null:
+		return ""
+	var body := _players.get_node_or_null(str(NetworkSession.local_peer_id())) as NetworkPlayer
+	if body == null:
+		return ""
+	var on_deck := raft.to_local(body.global_position)
+	var aboard := (
+		body.stance == NetworkPlayer.Stance.GROUNDED
+		and absf(on_deck.x) < 5.5 and absf(on_deck.z) < 5.8 and on_deck.y > 0.5
+	)
+	var to_mainland := Vector2(mainland.global_position.x - raft.global_position.x,
+		mainland.global_position.z - raft.global_position.z).length()
+	if aboard:
+		# The raft grounds in the mainland's shallows, short of the beach; the last few metres
+		# are on foot, because arriving means being ashore.
+		if to_mainland < mainland.shelf_radius:
+			return "Nearly there — step off the raft and wade ashore."
+		var strokes := body.input_node().paddle_strokes
+		if strokes == 0:
+			return "Hold %s to paddle." % _key_name(&"paddle")
+		if strokes < STEERING_TIP_STROKES:
+			return "Each stroke turns the raft away from your side — walk across the deck to steer."
+		return ""
+	var reach := Vector2(raft.global_position.x - body.global_position.x,
+		raft.global_position.z - body.global_position.z).length()
+	if reach <= NetworkPlayer.BOARD_RANGE:
+		return "Press %s to climb aboard." % _key_name(&"board")
+	var ashore_on_mainland := Vector2(body.global_position.x - mainland.global_position.x,
+		body.global_position.z - mainland.global_position.z).length() < mainland.beach_radius
+	if ashore_on_mainland:
+		return ""
+	if body.stance == NetworkPlayer.Stance.FLOATING:
+		return "Swim to the raft, then press %s." % _key_name(&"board")
+	return "Head down the beach to the raft."

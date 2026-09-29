@@ -189,6 +189,7 @@ peak_seed = 5
 [node name="Raft" parent="." node_paths=PackedStringArray("ocean") instance=ExtResource("20_raft")]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -52, -0.6, 0)
 ocean = NodePath("../Ocean")
+linear_damping_rate = 0.15
 
 [node name="Players" type="Node3D" parent="."]
 

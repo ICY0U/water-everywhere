@@ -105,10 +105,17 @@ func _ready() -> void:
 
 
 ## Starts hosting on [param port]. Returns [code]OK[/code], or the error that stopped it.
-func host(port: int = DEFAULT_PORT, player_name: String = "") -> Error:
+##
+## [param local_only] binds to the loopback address instead of every interface. A solo game is
+## still a session of one, so it still opens a socket — and a socket listening on the network
+## makes Windows ask a player to allow the game through the firewall before they have done
+## anything. Bound to loopback, solo play asks nothing, and a second local window can still join.
+func host(port: int = DEFAULT_PORT, player_name: String = "", local_only: bool = false) -> Error:
 	leave()
 
 	_peer = ENetMultiplayerPeer.new()
+	if local_only:
+		_peer.set_bind_ip(DEFAULT_ADDRESS)
 	# ENet counts clients, and the host is not one of its own clients — but it is a player, and
 	# it consumes a body out of the spawner's limit like everyone else. Asking ENet for
 	# MAX_PLAYERS clients therefore admits MAX_PLAYERS + 1 players, and the last to arrive is

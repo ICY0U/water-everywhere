@@ -80,11 +80,12 @@ func _capture_all() -> void:
 		_disable_fog(game)
 		await _ticks(TURN_TICKS)
 
-	# What F5 shows before any key is pressed.
-	await _save(game, "launch")
+	# What F5 shows before anything is pressed: the title screen.
+	await _save(game, "title")
 
-	# H, as a player would press it.
-	await _tap(KEY_H)
+	# Play, pressed as a player would press it. The button's own signal, so a Play that stopped
+	# reaching the game would show up here as a title screen that never went away.
+	(game.menu().find_child("Play", true, false) as Button).pressed.emit()
 	var body := await _wait_for_local_body(game)
 	if body == null:
 		printerr("capture_voyage: pressing H produced no player body")
@@ -118,6 +119,12 @@ func _capture_all() -> void:
 	_press(KEY_SPACE, false)
 	await _save(game, "paddling")
 
+	# Escape opens the menu, and pauses a solo game; Escape again resumes.
+	await _tap(KEY_ESCAPE)
+	await get_tree().process_frame
+	await _save(game, "pause_menu")
+	await _tap(KEY_ESCAPE)
+
 	# Set ashore on the mainland, which is what ends the run.
 	var mainland := game.mainland
 	var landing := Vector2(mainland.global_position.x + mainland.plateau_radius * 0.5,
@@ -126,6 +133,10 @@ func _capture_all() -> void:
 	body.linear_velocity = Vector3.ZERO
 	await _ticks(SETTLE_TICKS)
 	await _save(game, "arrival")
+	# The end screen, then Sail again from it, which should put the crew back ashore at home.
+	(game.menu().find_child("Again", true, false) as Button).pressed.emit()
+	await _ticks(SETTLE_TICKS)
+	await _save(game, "sailed_again")
 
 	get_tree().quit(0)
 
@@ -237,6 +248,10 @@ func _save(game: VoyageGame, label: String) -> void:
 	])
 	for line in status.text.split("\n"):
 		print("  | %s" % line)
+	var hint := game.get_node("HUD/Hint") as Label
+	print("  hint: %s   menu: %s   paused: %s" % [
+		hint.text if not hint.text.is_empty() else "(none)",
+		"open" if game.menu().is_blocking() else "closed", get_tree().paused])
 	# Handed back on a physics tick. The shot was taken on a rendering signal, and bodies moved
 	# from there did not move: the first rendered run set the player down beside the raft straight
 	# after a shot, and it was still standing at its spawn when F was pressed 57 m away.
