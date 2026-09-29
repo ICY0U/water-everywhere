@@ -32,8 +32,14 @@ extends SceneTree
 ## Column width for the suite name, so results line up in the terminal.
 const LABEL_WIDTH: int = 14
 
-## Rendering driver the GPU suite is asked for by name. Its whole point is a real device.
-const GPU_DRIVER: String = "d3d12"
+## Rendering driver the GPU suite is asked for by name, per platform. Its whole point is a real
+## device, so the driver is still named rather than left to the engine's default — but it has to
+## be one the platform HAS. Hard-coding D3D12 made the suite fail in 0.0 s on every Linux run,
+## with no verdict, before it had tested anything. Override with [code]--gpu-driver=[/code].
+const GPU_DRIVERS: Dictionary = {"Windows": "d3d12", "macOS": "metal"}
+
+## Driver for any platform not listed in [constant GPU_DRIVERS].
+const GPU_DRIVER_DEFAULT: String = "vulkan"
 
 ## Lower-cased fragments that mark a suite's closing verdict line. See [method _verdict_of].
 const VERDICT_MARKERS: Array[String] = ["passed", "failed", "failures", "timed out"]
@@ -86,6 +92,10 @@ const SUITES: Array[Dictionary] = [
 	{"name": "paddle", "script": "tools/verify_b01_paddle.gd", "gpu": false},
 	{"name": "test bay", "script": "tools/verify_test_bay.gd", "gpu": false},
 	{"name": "push", "script": "tools/verify_b06_push.gd", "gpu": false},
+	# Sails the whole voyage in each weather. [code]--fixed-fps[/code] steps it faster than real
+	# time: three crossings of two minutes each would otherwise hold the runner for seven.
+	{"name": "crossing", "script": "tools/verify_crossing.gd", "gpu": false,
+		"engine_args": ["--fixed-fps", "60"]},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 
@@ -128,6 +138,14 @@ func _process(_delta: float) -> bool:
 	return true
 
 
+## Returns the rendering driver the GPU suite should ask for on this platform.
+func _gpu_driver() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--gpu-driver="):
+			return argument.trim_prefix("--gpu-driver=")
+	return GPU_DRIVERS.get(OS.get_name(), GPU_DRIVER_DEFAULT)
+
+
 ## Returns the [code]--only=[/code] filter from the launch arguments, or an empty string.
 func _only_filter() -> String:
 	for argument in OS.get_cmdline_user_args():
@@ -143,9 +161,11 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 	# The GPU suite is not merely "not headless": the driver is named, because a device that
 	# quietly fell back would compare the CPU wave field against nothing in particular.
 	if suite["gpu"]:
-		arguments.append_array(["--script", suite["script"], "--rendering-driver", GPU_DRIVER])
+		arguments.append_array(["--script", suite["script"], "--rendering-driver", _gpu_driver()])
 	else:
 		arguments.append_array(["--headless", "--script", suite["script"]])
+	if suite.has("engine_args"):
+		arguments.append_array(suite["engine_args"])
 
 	var output: Array = []
 	if suite.has("args"):

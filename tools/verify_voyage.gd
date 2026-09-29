@@ -64,13 +64,18 @@ func _run() -> void:
 	# exist in the scene. This check exists because it did not: the first version of the line
 	# sent players to a "lighthouse" that was never built, and 36 other checks passed anyway.
 	# Assert against the world rather than against the string, or this just restates the bug.
+	#
+	# Matched without regard to case. The first version passed its pattern straight to
+	# find_children, which matches case-sensitively, so "*lighthouse*" could never find a node
+	# named "Lighthouse" — the PascalCase every node here uses — and the check would have failed
+	# the one time a landmark was genuinely built.
 	for landmark: String in ["lighthouse", "beacon", "tower", "harbour", "harbor"]:
 		if not voyage_objective.to_lower().contains(landmark):
 			continue
-		_expect(
-			not game.mainland.find_children("*%s*" % landmark, "", true, false).is_empty(),
-			"the objective's '%s' exists in the scene" % landmark
+		var named: Array = game.mainland.find_children("*", "", true, false).filter(
+			func(node: Node) -> bool: return String(node.name).to_lower().contains(landmark)
 		)
+		_expect(not named.is_empty(), "the objective's '%s' exists in the scene" % landmark)
 	_expect(
 		game.mainland is MountainIsland and (game.mainland as MountainIsland).summit_height() > 20.0,
 		"the mainland carries the relief the objective points at (%.1f m)" % (

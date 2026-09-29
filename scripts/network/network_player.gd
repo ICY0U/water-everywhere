@@ -501,7 +501,7 @@ func _apply_boarding() -> void:
 	# with the hull, so the raft moving underneath does not throw the player straight back off.
 	var yaw := global_rotation.y
 	global_transform = Transform3D(
-		Basis.from_euler(Vector3(0.0, yaw, 0.0)), raft.spawn_position(players)
+		Basis.from_euler(Vector3(0.0, yaw, 0.0)), raft.spawn_position(players, self)
 	)
 	linear_velocity = raft.linear_velocity
 	angular_velocity = Vector3.ZERO

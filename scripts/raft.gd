@@ -82,6 +82,22 @@ enum PushResult {
 ## thrust": once no fresh stroke arrives, thrust ends within this long.
 const STROKE_DURATION: float = 0.9
 
+## Metres either side of the centreline inside which a stroke drives straight ahead.
+##
+## The lever used to be [code]signf(x) * stroke_lever[/code], which has no middle: a paddler is
+## never exactly on the centreline once physics has touched them, so a solo crew boarding at the
+## centre slot turned at the full rate in whichever direction a few millimetres of solver noise
+## chose. Measured: 53 degrees of yaw in 36 s from the "centre", indistinguishable from paddling
+## at the edge. A band a stride wide is what makes "stand in the middle to go straight" true.
+const STRAIGHT_BAND: float = 0.75
+
+## Metres from the centreline at which a stroke reaches its full turning lever.
+##
+## Between the band and this the lever grows linearly, so a small step sideways is a small
+## correction rather than a switch. The deck spawn slots sit at 2.7 m, close enough to this that
+## a paddler put at the edge still turns hard: the paddle suite's edge check is unaffected.
+const FULL_TURN_OFFSET: float = 3.0
+
 const DECK_HEIGHT: float = 1.804
 const SPAWN_OFFSETS: Array[Vector2] = [
 	Vector2.ZERO, Vector2(-2.7, 0), Vector2(2.7, 0),
@@ -161,6 +177,30 @@ const SPAWN_OFFSETS: Array[Vector2] = [
 ## properly first rather than nudging this number against the same noise.
 @export_range(0.0, 400000.0, 100.0) var push_force: float = 90000.0
 
+## Seconds the mooring takes to swing the raft back to its berth, as a natural period.
+##
+## Long enough that the raft still visibly rides the swell and tugs at its line, short enough
+## that it cannot drift out of boarding reach of the jetty in the minute a crew takes to arrive.
+const MOORING_PERIOD: float = 6.0
+
+## Damping ratio of the mooring. Below 1, so the raft sways back once rather than creeping.
+const MOORING_DAMPING: float = 0.8
+
+## Whether the raft is tied up at its berth, waiting for its crew.
+##
+## An untied raft does not wait. It drifts with the sea at a few percent of the wind speed, and
+## in the minute a crew spends walking down to it that is enough to take it out of reach or put
+## it on the beach, where a shove against a 77 t hull in the swell barely moves it. Tied, it is
+## held to the transform [method moor_here] recorded by a spring-damper on position and heading,
+## so the raft still rides the waves and swings on its line.
+##
+## The first accepted stroke or shove casts it off: leaving the jetty is simply paddling away.
+## Server-decided, and replicated so every peer can draw the line and say "cast off".
+var moored: bool = false
+
+## Where [method moor_here] tied the raft up.
+var _mooring: Transform3D = Transform3D.IDENTITY
+
 ## Rises by one each time a shove is accepted. Replicated, never reset.
 ##
 ## A serial for the same reason [member stroke_serial] is one: a shove is momentary, and a flag
@@ -207,6 +247,61 @@ func _physics_process(delta: float) -> void:
 	super(delta)
 	_advance_strokes(delta)
 	_advance_pushes(delta)
+	_hold_mooring()
+
+
+## Ties the raft up where it is now, facing the way it faces now. Server only.
+##
+## Recorded as a whole transform so a reset can re-tie it at the berth it was moved back to.
+func moor_here() -> void:
+	if not is_multiplayer_authority():
+		return
+	_mooring = global_transform
+	moored = true
+
+
+## Returns the lever arm a stroke taken [param lateral] metres off the centreline pulls at.
+##
+## Signed like the offset: left of the centreline is negative and pushes the bow right. Zero
+## inside [constant STRAIGHT_BAND], growing linearly to [member stroke_lever] at
+## [constant FULL_TURN_OFFSET]. Public so presentation can show a paddler which way their next
+## stroke will turn the raft, from the same function the server applies.
+func lever_at(lateral: float) -> float:
+	var reach := clampf(
+		(absf(lateral) - STRAIGHT_BAND) / (FULL_TURN_OFFSET - STRAIGHT_BAND), 0.0, 1.0
+	)
+	return signf(lateral) * reach * stroke_lever
+
+
+## Pulls a moored raft back toward its berth. See [member moored].
+##
+## Horizontal position and heading only: the sea keeps heave, roll and pitch, which is what makes
+## a tied-up raft look afloat rather than parked. Scaled by the raft's own mass and yaw inertia so
+## [constant MOORING_PERIOD] means the same thing whatever the hull weighs.
+func _hold_mooring() -> void:
+	if not moored:
+		return
+	var omega := TAU / MOORING_PERIOD
+	var offset := global_position - _mooring.origin
+	offset.y = 0.0
+	var drift := linear_velocity
+	drift.y = 0.0
+	apply_central_force(
+		(-offset * omega * omega - drift * 2.0 * MOORING_DAMPING * omega) * mass
+	)
+
+	var heading := -global_basis.z
+	heading.y = 0.0
+	var berth := -_mooring.basis.z
+	berth.y = 0.0
+	if heading.length_squared() < 0.0001 or berth.length_squared() < 0.0001:
+		return
+	var yaw_error := heading.signed_angle_to(berth, Vector3.UP)
+	var size := _hull.bounds.size if _hull != null and _hull.is_valid() else Vector3(9, 3, 9.6)
+	var yaw_inertia := mass * (size.x * size.x + size.z * size.z) / 12.0
+	apply_torque(Vector3.UP * (
+		yaw_error * omega * omega - angular_velocity.y * 2.0 * MOORING_DAMPING * omega
+	) * yaw_inertia)
 
 
 ## Applies one paddle stroke from [param paddler], and says whether it was allowed.
@@ -240,7 +335,10 @@ func request_stroke(paddler: NetworkPlayer, _side: float = 0.0) -> StrokeResult:
 	var local := to_local(paddler.global_position)
 	_stroke_remaining[paddler.get_instance_id()] = STROKE_DURATION
 	# Left of the centreline pushes the bow right, and the reverse; that is what steering IS.
-	_stroke_arm[paddler.get_instance_id()] = signf(local.x) * stroke_lever
+	_stroke_arm[paddler.get_instance_id()] = lever_at(local.x)
+	# Casting off is the first stroke, not a separate action: the crew paddles away from the
+	# jetty and the line lets go. See [member moored].
+	moored = false
 
 	stroke_serial += 1
 	thrusting = true
@@ -294,6 +392,8 @@ func request_push(pusher: NetworkPlayer) -> PushResult:
 		return PushResult.TOO_CLOSE
 	_push_elapsed[pusher.get_instance_id()] = 0.0
 	_push_direction[pusher.get_instance_id()] = direction.normalized()
+	# A shove against a tied-up hull would only stretch the line; shoving it off unties it.
+	moored = false
 
 	push_serial += 1
 	return PushResult.ACCEPTED
@@ -360,7 +460,13 @@ func _advance_strokes(delta: float) -> void:
 	thrusting = still_going
 
 
-func spawn_position(players: Node3D) -> Vector3:
+## Returns the clearest deck slot, in world space, for a player arriving on this raft.
+##
+## [param exclude] is left out of the clearance test: the player being placed. Boarding passes the
+## boarder, because counting them made every lone swimmer land on the slot FARTHEST from where
+## they climbed out — the far edge, where the first stroke turns the raft hard. With nobody else
+## aboard every slot is equally clear, and the first, the centre, wins.
+func spawn_position(players: Node3D, exclude: Node3D = null) -> Vector3:
 	# Choose the clearest deck slot in the raft's CURRENT transform, including late joins.
 	var best := Vector3.ZERO
 	var best_clearance := -1.0
@@ -372,6 +478,8 @@ func spawn_position(players: Node3D) -> Vector3:
 		candidate += up * (half_extent + 0.15)
 		var clearance := INF
 		for player: Node3D in players.get_children():
+			if player == exclude:
+				continue
 			clearance = minf(clearance, candidate.distance_squared_to(player.global_position))
 		if clearance > best_clearance:
 			best = candidate

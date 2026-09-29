@@ -1,4 +1,4 @@
-[gd_scene load_steps=33 format=3]
+[gd_scene load_steps=35 format=3]
 
 [ext_resource type="Script" path="res://scripts/wave_field.gd" id="1_wavefield"]
 [ext_resource type="Script" path="res://scripts/ocean.gd" id="2_ocean"]
@@ -25,6 +25,8 @@
 [ext_resource type="PackedScene" uid="uid://c60myiokolfxe" path="res://scenes/player_kotarou.tscn" id="24_playerscene"]
 [ext_resource type="Script" path="res://scripts/mountain_island.gd" id="25_mountain"]
 [ext_resource type="Script" path="res://scripts/network/run_director.gd" id="26_director"]
+[ext_resource type="Script" path="res://scripts/props/jetty.gd" id="27_jetty"]
+[ext_resource type="Script" path="res://scripts/props/lighthouse.gd" id="28_lighthouse"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("4_skyshader")
@@ -105,7 +107,7 @@ shader_parameter/use_normal_map = false
 shader_parameter/light_bands = 3
 shader_parameter/specular_strength = 0.0
 
-[node name="Voyage" type="Node3D" node_paths=PackedStringArray("ocean", "weather", "raft", "mainland", "home")]
+[node name="Voyage" type="Node3D" node_paths=PackedStringArray("ocean", "weather", "raft", "mainland", "home", "lighthouse")]
 script = ExtResource("22_game")
 player_scene = ExtResource("24_playerscene")
 ocean = NodePath("Ocean")
@@ -113,6 +115,7 @@ weather = NodePath("Weather")
 raft = NodePath("Raft")
 mainland = NodePath("Mainland")
 home = NodePath("HomeIsland")
+lighthouse = NodePath("Mainland/Lighthouse")
 
 [node name="RunDirector" type="Node" parent="."]
 script = ExtResource("26_director")
@@ -166,7 +169,7 @@ surf_swash = 1.6
 terrain_seed = 17
 
 [node name="Mainland" type="StaticBody3D" parent="." node_paths=PackedStringArray("ocean") groups=["playable_islands"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -300, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -270, 0, 0)
 script = ExtResource("25_mountain")
 deck_height = 8.0
 plateau_radius = 62.0
@@ -186,9 +189,20 @@ peak_spread = 0.4
 peak_breadth = 0.58
 peak_seed = 5
 
+[node name="Lighthouse" type="StaticBody3D" parent="Mainland" node_paths=PackedStringArray("ocean", "weather")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 57.4, 0, 8.1)
+script = ExtResource("28_lighthouse")
+ocean = NodePath("../../Ocean")
+weather = NodePath("../../Weather")
+
 [node name="Raft" parent="." node_paths=PackedStringArray("ocean") instance=ExtResource("20_raft")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -46, -0.6, 0)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -58, -0.6, 0)
 ocean = NodePath("../Ocean")
+
+[node name="HomeJetty" type="StaticBody3D" parent="." node_paths=PackedStringArray("moored_raft")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -31, 2.6, 0)
+script = ExtResource("27_jetty")
+moored_raft = NodePath("../Raft")
 
 [node name="Players" type="Node3D" parent="."]
 
@@ -227,6 +241,7 @@ cloud_shadow_size = 500.0
 [node name="Weather" type="Node" parent="." node_paths=PackedStringArray("world_environment", "sun", "ocean", "atmosphere")]
 script = ExtResource("6_weather")
 presets = Array[ExtResource("7_preset")]([ExtResource("8_sunny"), ExtResource("9_overcast"), ExtResource("10_stormy")])
+wind_angle_override = 190.0
 world_environment = NodePath("../WorldEnvironment")
 sun = NodePath("../SunLight")
 ocean = NodePath("../Ocean")

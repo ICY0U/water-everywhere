@@ -16,3 +16,6 @@
 # Large binaries nothing references. The sky is procedural, so these HDRIs are unused; they
 # are kept on disk but left out of history to save ~10 MB per clone.
 /assets/hdri/
+
+# Python bytecode from the asset generators in tools/.
+__pycache__/

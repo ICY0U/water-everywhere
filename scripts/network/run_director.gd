@@ -46,13 +46,15 @@ signal run_reset(epoch: int)
 ## Held here rather than in the HUD so that every peer renders the same sentence from the same
 ## authoritative phase, instead of each writing its own wording for a state it inferred.
 const OBJECTIVE_TEXT: Dictionary = {
-	Phase.LOBBY: "Press H to host, then J to open a second window.",
-	# Names the mountains because the mountains are what is on screen. An earlier version of this
-	# line promised a lighthouse, which the scene has never contained: the objective is the only
-	# instruction a new player gets, so it must describe a landmark they can actually see. A
-	# suite check now asserts that, because 36 green checks did not catch the invented one.
-	Phase.VOYAGE: "Sail west to the mountains on the mainland.",
-	Phase.ARRIVAL: "You reached the mainland. Press R to sail again.",
+	Phase.LOBBY: "Gather the crew at the jetty.",
+	# Names the lighthouse because the lighthouse is now on screen: it stands on the mainland's
+	# near shore, banded red and white, from the first frame. An earlier version of this line
+	# promised a lighthouse the scene did not contain, and the objective is the only instruction a
+	# new player gets, so it must describe a landmark they can actually see. verify_voyage asserts
+	# every landmark this names exists in the scene, because 36 green checks did not catch the
+	# invented one.
+	Phase.VOYAGE: "Paddle west to the lighthouse on the mainland.",
+	Phase.ARRIVAL: "Landfall! The crew made it to the mainland.",
 }
 
 ## Current phase. Authoritative on the server; a replicated copy everywhere else.

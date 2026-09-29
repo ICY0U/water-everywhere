@@ -234,6 +234,29 @@ func target() -> Node3D:
 	return _target
 
 
+## Turns the view to face [param point] across the water, keeping the current pitch.
+##
+## For a scene that knows where the player should be looking when they arrive — the voyage turns
+## a fresh crew toward the lighthouse, rather than leaving them facing whatever the camera's
+## default yaw happens to show.
+func look_toward(point: Vector3) -> void:
+	var from := _target.global_position if is_instance_valid(_target) else global_position
+	var flat := Vector2(point.x - from.x, point.z - from.z)
+	if flat.length_squared() < 0.0001:
+		return
+	# The view looks along -Z rotated by the yaw, which is (-sin yaw, -cos yaw) on the ground.
+	_yaw = atan2(-flat.x, -flat.y)
+	global_transform.basis = Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
+
+
+## Returns the direction the view is facing across the ground, as a yaw in radians.
+##
+## The same yaw [method movement_basis] steers by, so a HUD compass built on it agrees with the
+## direction W actually walks.
+func yaw() -> float:
+	return _yaw
+
+
 ## Returns which view is active.
 func view_mode() -> ViewMode:
 	return _mode

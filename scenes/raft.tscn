@@ -21,6 +21,7 @@ script = ExtResource("1")
 body_density = 300.0
 hull_detail = 32
 linear_damping_rate = 1.1
+horizontal_damping_scale = 0.1
 angular_drag = 6.0
 contact_radius_scale = 1.0
 

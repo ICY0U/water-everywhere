@@ -18,6 +18,20 @@ signal weather_changed(preset: WeatherPreset, index: int)
 ## Preset applied on ready.
 @export var starting_index: int = 0
 
+## Direction the wind blows TOWARD for this scene, in degrees, or negative to keep each preset's.
+##
+## The presets are shared between scenes, and a direction that suits one layout can work against
+## another. Every preset blows toward 45 degrees, which in the voyage is a head sea: the crossing
+## runs west, so the crew paddled into the waves while Stokes drift carried them back toward the
+## island they left. Overriding the direction here rather than editing the presets leaves every
+## other scene's sea exactly as it was.
+##
+## Applied to a copy of the preset, never to the shared resource, and before anything reads it,
+## so the waves, foam, spray, rain, clouds and cloud shadows all agree on the one direction.
+## Every peer loads the same scene and therefore applies the same override, so nothing about it
+## needs replicating beyond the preset index that already is.
+@export_range(-1.0, 360.0, 1.0) var wind_angle_override: float = -1.0
+
 @export_group("Targets")
 
 ## Environment holding the sky whose material is driven. Required for any visible change.
@@ -34,6 +48,9 @@ signal weather_changed(preset: WeatherPreset, index: int)
 @export var atmosphere: Atmosphere
 
 var _current_index: int = -1
+
+## Copies of the presets with [member wind_angle_override] applied, by index. Made once each.
+var _overridden: Dictionary = {}
 
 
 func _process(_delta: float) -> void:
@@ -59,7 +76,7 @@ func apply_index(index: int) -> void:
 		return
 
 	var wrapped := posmod(index, presets.size())
-	var preset := presets[wrapped]
+	var preset := _effective_preset(wrapped)
 	if preset == null:
 		push_warning("%s: preset at index %d is empty." % [name, wrapped])
 		return
@@ -96,10 +113,25 @@ func current_index() -> int:
 
 
 ## Returns the preset currently applied, or null before the first apply.
+##
+## This is the preset as applied, [member wind_angle_override] included, so anything reading the
+## wind from it agrees with the sea that is actually on screen.
 func current_preset() -> WeatherPreset:
 	if _current_index < 0 or _current_index >= presets.size():
 		return null
-	return presets[_current_index]
+	return _effective_preset(_current_index)
+
+
+## Returns the preset at [param index] as this scene applies it.
+func _effective_preset(index: int) -> WeatherPreset:
+	var preset := presets[index]
+	if preset == null or wind_angle_override < 0.0:
+		return preset
+	if not _overridden.has(index):
+		var copy := preset.duplicate() as WeatherPreset
+		copy.wind_angle = wind_angle_override
+		_overridden[index] = copy
+	return _overridden[index]
 
 
 func _resolve_environment() -> Environment:

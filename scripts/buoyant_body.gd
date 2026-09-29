@@ -117,6 +117,20 @@ const ADDED_MASS_DEADBAND: float = 0.05
 ## solver stable when the body is nearly still.
 @export_range(0.0, 10.0, 0.05) var linear_damping_rate: float = 0.6
 
+## Fraction of [member linear_damping_rate] that resists HORIZONTAL motion, from 0 to 1.
+##
+## The linear term is isotropic by default, which is right for a small body and wrong for the
+## raft. Its rate was raised to 1.1 to settle the raft's ride in waves — heave swing fell from
+## 2.59 m to 0.96 m — and that is a vertical problem. Applied horizontally too, the same term
+## is 85 kN of resistance per m/s on a 77.8 t hull, so a paddler's 30 kN could never push it
+## past 0.35 m/s: measured at 0.3 m/s averaged over 36 s of continuous strokes, which turns a
+## 150 m crossing into ten minutes of holding a key.
+##
+## Scaling only the horizontal components keeps the tuned heave damping exactly as it was and
+## leaves surge and sway to the quadratic drag, which is the term that physically governs a hull
+## moving through water. 1.0 reproduces the old isotropic behaviour for every other body.
+@export_range(0.0, 1.0, 0.01) var horizontal_damping_scale: float = 1.0
+
 ## Resistance to rotation, as a rate in reciprocal seconds.
 ##
 ## The shape-dependent righting moment already opposes roll and pitch. This adds the yaw
@@ -275,7 +289,11 @@ func _apply_hydrodynamics(centroid_world: Vector3, lever: Vector3, delta: float)
 		apply_force(drag, lever)
 
 	# --- linear damping: what actually brings a body to rest on a calm sea ---
-	apply_force(-relative * linear_damping_rate * displaced_mass, lever)
+	# Horizontal and vertical are scaled separately; see [member horizontal_damping_scale].
+	var damping := -relative * linear_damping_rate * displaced_mass
+	damping.x *= horizontal_damping_scale
+	damping.z *= horizontal_damping_scale
+	apply_force(damping, lever)
 
 	# --- added mass: resistance to ACCELERATION, not to velocity ---
 	#

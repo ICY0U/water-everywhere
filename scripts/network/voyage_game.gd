@@ -23,11 +23,27 @@ const ARRIVAL_MARGIN: float = 12.0
 ## but there is no reason to run it every frame.
 const ARRIVAL_INTERVAL: float = 0.25
 
+## How far out from the home island's centre the crew is put ashore, as a fraction of its plateau.
+##
+## Toward the rim on the jetty's side, so the first thing a player sees is the way down to the
+## raft rather than the middle of a sand dune.
+const SPAWN_RING_FRACTION: float = 0.7
+
+## Metres between neighbouring crew members along the spawn arc. A player is 1.55 m across.
+const SPAWN_SPACING: float = 2.6
+
+## Metres above the analytic ground a player is dropped from, so the solver settles them onto the
+## real collision surface rather than trusting the profile to agree with the mesh to the millimetre.
+const SPAWN_DROP_HEIGHT: float = 0.35
+
 ## Island the crew is sailing towards. Reaching it ends the run.
 @export var mainland: Island
 
 ## Island the crew starts on.
 @export var home: Island
+
+## The landmark the crossing is steered by. Optional; without it the mainland's centre is used.
+@export var lighthouse: Node3D
 
 @onready var _director: RunDirector = $RunDirector
 
@@ -38,6 +54,11 @@ func _ready() -> void:
 	super()
 	_director.phase_changed.connect(_on_phase_changed)
 	_director.run_reset.connect(_on_run_reset)
+	# Tied up from the first frame, so the raft is waiting at the jetty rather than drifting off
+	# while the crew is still walking down to it. Only the authority simulates the raft, so this
+	# is a no-op anywhere else and the replicated value takes over.
+	if raft != null:
+		raft.moor_here()
 	# The objective belongs on screen from the first frame, not from the first phase change.
 	_refresh_status()
 
@@ -78,11 +99,14 @@ func reset_run() -> void:
 	_director.reset_run()
 
 	if raft != null:
-		raft.position = _raft_start
-		raft.rotation = Vector3.ZERO
+		# The whole transform, heading included: the raft starts pointed at the mainland, and a
+		# reset that zeroed its rotation would hand the next crew a raft facing north.
+		raft.transform = _raft_start
 		raft.linear_velocity = Vector3.ZERO
 		raft.angular_velocity = Vector3.ZERO
+		raft.moor_here()
 
+	var slot := 0
 	for child in _players.get_children():
 		var body := child as NetworkPlayer
 		if body == null:
@@ -93,7 +117,11 @@ func reset_run() -> void:
 		var input := body.input_node()
 		if input != null:
 			input.clear_intent()
-		body.position = _spawn_position(body.owner_peer_id)
+		# One slot per body. Asking _spawn_position for each would hand every one of them the SAME
+		# slot, because it counts the players that exist, and that count does not change during a
+		# reset: three crew would be dropped inside one another.
+		body.position = _spawn_slot(slot)
+		slot += 1
 		body.rotation = Vector3.ZERO
 		body.linear_velocity = Vector3.ZERO
 		body.angular_velocity = Vector3.ZERO
@@ -117,13 +145,56 @@ func _unhandled_input(event: InputEvent) -> void:
 func _spawn_position(peer_id: int) -> Vector3:
 	if home == null:
 		return super(peer_id)
-	var ring := home.plateau_radius * 0.45
-	var bearing := float(_players.get_child_count()) * (2.6 / maxf(ring, 0.001))
+	return _spawn_slot(_players.get_child_count())
+
+
+## Returns the [param index]th place ashore, on the side of the home island facing the raft.
+##
+## Slots fan out alternately either side of the bearing to the raft, so a crew of any size stands
+## together looking down the jetty, and the first player is on the line straight to it.
+func _spawn_slot(index: int) -> Vector3:
+	if home == null:
+		return super._spawn_position(0)
+	var ring := home.plateau_radius * SPAWN_RING_FRACTION
+	var step := SPAWN_SPACING / maxf(ring, 0.001)
+	var side := 1.0 if index % 2 == 1 else -1.0
+	var bearing := _departure_bearing() + side * float(ceili(float(index) * 0.5)) * step
 	var spot := Vector2(
 		home.global_position.x + cos(bearing) * ring,
 		home.global_position.z + sin(bearing) * ring,
 	)
-	return Vector3(spot.x, home.height_at_world(spot) + 0.35, spot.y)
+	return Vector3(spot.x, home.height_at_world(spot) + SPAWN_DROP_HEIGHT, spot.y)
+
+
+## Returns the bearing from the home island's centre toward where the raft starts, in radians.
+func _departure_bearing() -> float:
+	if home == null or raft == null:
+		return PI
+	var toward := _raft_start.origin - home.global_position
+	return atan2(toward.z, toward.x)
+
+
+## Returns the point the crew is steering for: the lighthouse, or the mainland without one.
+func destination() -> Vector3:
+	if is_instance_valid(lighthouse):
+		return lighthouse.global_position
+	if mainland != null:
+		return mainland.global_position
+	return Vector3.ZERO
+
+
+## Builds a player, and turns this peer's own camera toward the lighthouse once its body exists.
+func _spawn_player(data: Dictionary) -> Node:
+	var body := super(data)
+	if int(data.get("peer_id", 1)) == NetworkSession.local_peer_id():
+		body.ready.connect(_face_destination, CONNECT_ONE_SHOT)
+	return body
+
+
+## Points the local camera across the water at the destination.
+func _face_destination() -> void:
+	if _camera != null:
+		_camera.look_toward(destination())
 
 
 ## Hands a joiner the run baseline alongside the weather the base class already sends.
@@ -150,6 +221,9 @@ func _on_phase_changed(_phase: RunDirector.Phase, _revision: int) -> void:
 
 func _on_run_reset(_epoch: int) -> void:
 	_refresh_status()
+	# Every peer turns its own camera: the view is local, and a crew reset to the jetty should be
+	# looking at the crossing ahead rather than at wherever the last one ended.
+	_face_destination()
 
 
 ## True when this peer decides the run: the server, or an offline single-player launch.
@@ -175,8 +249,8 @@ func _anyone_ashore() -> bool:
 	return false
 
 
-## Where the raft began, so a reset can put it back.
-@onready var _raft_start: Vector3 = raft.position if raft != null else Vector3.ZERO
+## Where the raft began, heading included, so a reset can put it back exactly.
+@onready var _raft_start: Transform3D = raft.transform if raft != null else Transform3D.IDENTITY
 
 
 func _refresh_status() -> void:
