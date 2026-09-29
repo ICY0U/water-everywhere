@@ -2,6 +2,7 @@
 
 **Revision:** 2 • 13 September 2026  
 **Status:** production plan in progress. A01-A04 complete: baseline captured, the one failing suite fixed, a Windows build exported and verified, and a voyage scene with an authoritative run phase added. B01 propulsion is implemented and verified headlessly but its human gate is open, so it is `READY FOR USER TEST` rather than complete. **17/17 suites now pass.** See [A01](planning/A01_BASELINE.md), [A02a](planning/A02A_REMOTE_INPUT_FIX.md) and [A03/A04](planning/A03_A04_EXPORT_AND_VOYAGE.md).  
+**Demo build (29 September 2026):** at the user's request the voyage was made into a playable demo — title screen, solo/host/join, HUD, summary and best times, settings, gamepad, synthesised audio, lighthouse and jetty — and the crossing was proved sailable in every weather by a bot using only player controls. It is `READY FOR USER TEST`, and it changes B01's accepted feel (faster raft, centre-band steering), which needs re-acceptance. **20/20 suites pass.** See [DEMO01](planning/DEMO01_DEMO_READINESS.md).  
 **Name:** Water EveryWhere. Retire the old working title “Lost at Sea” in future product-facing work.  
 **Platform:** Windows PC first; existing Godot/Jolt/cel-shaded foundation.  
 **Players:** tune for 3–4; support and qualify 2–8. Solo is initially a development mode, not a launch promise.  
@@ -744,7 +745,9 @@ Initial design references: [PEAK](https://store.steampowered.com/app/3527290/PEA
 | DEC11 | Short slice before full voyage | C07 pacing |
 | DEC12 | One chunk then human test; implementation still planned | Each accepted checkpoint |
 
-**Next: play the raft.** Three human tests are open and none of them needs another line of code. B01's own gate — starting, turning and stopping the raft in the test bay — plus the two A04 tests: whether a player identifies home within 30 seconds, and keyboard/mouse comfort in the exported build. B01's propulsion is implemented and every automated clause of its gate passes, so what is unknown now is feel, and no suite can answer that. **B02 should not start until B01's human test passes**, because shared paddling tunes a stroke that has never been judged by a person; if the single stroke is wrong, two of them are wrong together.
+**Next: play the demo.** [DEMO01](planning/DEMO01_DEMO_READINESS.md) lists seven open human checks; the first two — whether the faster, centre-band raft still feels right, and whether a newcomer finds their way from title to landfall from the HUD alone — decide whether B02 builds on it. The paragraph below is the state before the demo build.
+
+**Previously: play the raft.** Three human tests are open and none of them needs another line of code. B01's own gate — starting, turning and stopping the raft in the test bay — plus the two A04 tests: whether a player identifies home within 30 seconds, and keyboard/mouse comfort in the exported build. B01's propulsion is implemented and every automated clause of its gate passes, so what is unknown now is feel, and no suite can answer that. **B02 should not start until B01's human test passes**, because shared paddling tunes a stroke that has never been judged by a person; if the single stroke is wrong, two of them are wrong together.
 
 Fixed alongside, outside the chunk list, from a human play report and a bug the suites could not see:
 

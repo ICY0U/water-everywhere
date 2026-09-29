@@ -1,93 +1,148 @@
-# WaterEVERYWHERE
+# Water EveryWhere
 
-A cel-shaded ocean for Godot 4.7 with physically-modelled waves.
+A cooperative raft voyage across a cel-shaded ocean with physically-modelled waves, built in
+Godot 4.7.
 
 The design goal is "real physics, toon surface": the water *moves* like real deep-water
 ocean, but it is *drawn* like a painted illustration — flat colour bands, hard-edged
 foam, and crisp specular blobs instead of smooth PBR gradients.
 
-
-
 The production plan, its chunk-by-chunk gates and the evidence behind each completed chunk are in
-[GAME_PLAN.md](GAME_PLAN.md) and [planning/](planning/).
+[GAME_PLAN.md](GAME_PLAN.md) and [planning/](planning/). What the demo build added, and what is
+still open, is in [planning/DEMO01_DEMO_READINESS.md](planning/DEMO01_DEMO_READINESS.md).
 
 ![sea level](docs/sea_level.png)
 
-## Running it
+## Playing the demo
 
-Open the project in Godot 4.7 and press **F5** to play `scenes/archipelago.tscn`.
-Press **H** to host or **J** to join. You then spawn on the larger starter island, with a mountainous exploration island, five small
-islands and six low-poly background ranges. Terrain has basic cel-shaded sand/earth/rock
-textures and no vegetation. See [island world notes and previews](docs/island_world.md).
+Open the project in Godot 4.7 and press **F5**, or run an exported build. The game opens on its
+title screen, drawn over the live sea: the raft waiting at the end of its jetty, and the
+mainland's lighthouse across the water.
 
-Or launch directly:
+**The voyage.** Choose **Set Sail**, pick the sea, and you are put ashore on the home island.
+Walk down the jetty, climb aboard the raft and paddle west to the red-and-white lighthouse on the
+mainland; the first stroke casts off the mooring. **Where you stand is how you steer**: paddle
+from the middle to go straight, from the right side to turn left, from the left side to turn
+right. The raft panel in the corner shows where the lighthouse lies and where to stand. Beach the
+raft, walk off it and head up the beach: landfall ends the crossing with a summary and your best
+time for that sea. A solo crossing takes about two minutes.
 
-```sh
-"D:/MainSystems/Steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe" \
-    --path . --rendering-driver d3d12
-```
-
-| Key | Action |
+| Sea | What it is |
 | --- | --- |
-| `WASD` | move horizontally |
-| `Q` / `E` | down / up |
-| `Shift` / `Alt` | sprint / slow |
-| Mouse | look |
-| `1` / `2` / `3` | sunny / overcast / stormy |
-| `C` | cycle weather |
-| `V` | toggle first / third person |
-| `F` | climb onto a nearby raft |
-| `Esc` | release the mouse |
+| **Calm** | Sunshine and a gentle swell. The best first crossing. |
+| **Choppy** | Grey skies, a rising sea and the odd shower. |
+| **Stormy** | A full gale. Big waves, driving rain; expect to swim. |
 
-## Multiplayer
+Every one of them is sailed end to end by [tools/verify_crossing.gd](tools/verify_crossing.gd), a
+bot that uses only a player's controls, on every run of the test suite.
 
-The main archipelago starts offline. Press **H** to host or **J** to join an existing host.
-Players arrive on the starter island. Press **J** while already hosting to open a second
-client window for a local test.
-Explicit `--server` and `--client` arguments remain available.
+### Controls
 
-The separate `scenes/multiplayer_demo.tscn` still starts players on the floating barrel raft.
-Its deck movement, buoyancy and boarding behavior are described in
-[raft integration and validation](docs/raft_integration.md).
+| Action | Keyboard & mouse | Gamepad (Xbox layout) |
+| --- | --- | --- |
+| Walk / swim | `WASD` | Left stick |
+| Look | Mouse | Right stick |
+| Sprint | `Shift` | `L3` / `LT` |
+| Climb aboard the raft | `F` | `A` |
+| Paddle (hold) | `Space` | `RT` / `X` |
+| Push the raft off a beach | `G` | `B` |
+| Swim up / dive | `E` / `Q` | `RB` / `LB` |
+| First / third person | `V` | `Y` |
+| Menu (pauses a solo game) | `Esc` | `Menu` |
+| Change the weather | `1` `2` `3`, `C` | — |
+| Quit | `Ctrl` + `Q` | — |
 
-To play across two machines rather than one, pass the server's address to the client. Both
-sides accept `--port=` as well, so a session can avoid the default port entirely:
+The HUD names the right key or button for whichever device you last touched. **How to Play** in
+the menu lists the same table from the live input map, so it cannot drift from the bindings.
+
+### Playing together
+
+**Host a Crew** listens on a UDP port (27015 by default) and shows your local addresses; friends
+choose **Join a Crew** and enter one of them. Anyone can join mid-voyage and is handed the current
+weather, phase and clock. In a crew the menu does **not** pause the world — it says so — and only
+the host can restart the voyage. Over the internet the host must forward the UDP port; there is
+no relay or lobby service yet (see the plan's F05/F06).
+
+**Set Sail** runs the same authoritative game with no network at all: a solo voyage opens no
+socket, so there is no firewall prompt.
+
+Launch arguments, after a bare `--`, still drive the two-window development test and skip the
+title screen:
 
 ```sh
 # on the host
-godot --path . --rendering-driver d3d12 -- --server --name=Host --port=27015
+godot --path . -- --server --name=Host --port=27015
 # on the other machine
-godot --path . --rendering-driver d3d12 -- --client --name=Guest --address=192.168.1.50 --port=27015
+godot --path . -- --client --name=Guest --address=192.168.1.50 --port=27015
 ```
 
-`J` uses the same address, and the offline panel names the machine it would reach, so there is
-no guessing about where the key points. Without `--address=` it is `127.0.0.1` and the game is
-same-machine only — which is what it silently was before these arguments existed. An unusable
-`--port=` is refused with a warning rather than clamped, because a typo that quietly became a
-different valid port presents as "the other machine cannot see me".
+`--profile=NAME` keeps a separate settings file and best-time table under
+`user://profiles/NAME/`; the second window a host opens with `J` uses `--profile=guest`, so the two
+windows on one machine no longer overwrite each other's settings.
 
-| Key | Action |
-| --- | --- |
-| `WASD` | steer relative to the camera, independent of hull roll |
-| `Shift` / `Alt` | sprint / slow (Alt takes priority) |
-| `Q` / `E` | dive / rise |
-| `V` | toggle third / first person |
-| `Esc` / left click | release mouse and stop thrust / resume control |
-| `1` `2` `3` / `C` | weather (applies to **everyone**) |
+### Settings
 
-| `P` | pause (single player only) |
+Sound (master, music, effects, sea and weather), controls (mouse and stick sensitivity, invert
+look, control hints) and display (graphics quality, render scale, field of view, fullscreen,
+vsync, frame-rate counter). Every change applies immediately and is saved to
+`user://settings.cfg`. The first launch picks a graphics preset from the GPU: **Low** drops
+volumetric fog and renders at 80% with FSR, **Medium** uses 2x MSAA and cheaper shadow
+filtering, **High** is the look the game is authored for.
 
-| `Ctrl` + `Q` | quit |
-| `H` / `J` | host / join when offline; J opens a second client when hosting |
+### Building
+
+Two export presets are configured: **Windows Desktop** and **Linux**, both x86_64, with the game
+icon, version 0.9.0 and the boot splash. With the 4.7.2 export templates installed:
+
+```sh
+godot --headless --path . --export-release "Windows Desktop" build/windows/WaterEVERYWHERE.exe
+godot --headless --path . --export-release "Linux" build/linux/WaterEVERYWHERE.x86_64
+```
+
+`tools/`, `planning/`, `docs/` and `artifacts/` are excluded from the pack, so the verification
+suites cannot run inside a build. The build checks itself instead:
+
+```sh
+build/linux/WaterEVERYWHERE.x86_64 -- --smoke-test            # title, set sail, quit: exit 0
+build/linux/WaterEVERYWHERE.x86_64 -- --server --smoke-test   # the same for a hosted session
+```
+
+### Testing
+
+```sh
+godot --path . --headless --script tools/run_suites.gd
+```
+
+Twenty suites, one command, one exit code. The spray suite renders on the GPU, so it needs a
+display; the runner asks for Direct3D 12 on Windows, Metal on macOS and Vulkan elsewhere
+(`-- --gpu-driver=NAME` overrides). On a machine with no GPU, Xvfb and Mesa's software Vulkan
+driver (lavapipe) run it: `xvfb-run godot --path . --headless --script tools/run_suites.gd`.
+
+The capture tools photograph what no assertion can judge — run them with a display:
+[tools/capture_frontend.gd](tools/capture_frontend.gd) for the title, HUD, pause menu and
+summary, [tools/capture_voyage.gd](tools/capture_voyage.gd) for the jetty and the lighthouse.
+
+## Multiplayer
+
+The voyage is server-authoritative: the host runs every body's physics and the run's phase, and
+clients send only their input. The separate `scenes/multiplayer_demo.tscn` still starts players on
+the floating barrel raft, and `scenes/archipelago.tscn` on the starter island; both keep the old
+development flow of **H** to host and **J** to join. Their deck movement, buoyancy and boarding are
+described in [raft integration and validation](docs/raft_integration.md).
+
+`J` uses the address given by `--address=`, and the offline panel of those scenes names the
+machine it would reach, so there is no guessing about where the key points. Without it, it is
+`127.0.0.1`. An unusable `--port=` is refused with a warning rather than clamped, because a typo
+that quietly became a different valid port presents as "the other machine cannot see me".
 
 Movement uses camera yaw in both views, with equal cardinal and diagonal thrust. Looking up or
 down and rolling in waves do not rotate the steering axes. Releasing the mouse or switching
-windows clears movement, sprint and vertical thrust; the cube continues to drift with the sea.
+windows clears movement, sprint and vertical thrust; the body continues to drift with the sea.
 
 Input has its own client-owned synchronizer, configured before spawn. Body transforms remain
 server-owned and remote bodies are frozen against local physics integration. This follows
 [Godot's synchronizer authority model](https://docs.godotengine.org/en/stable/classes/class_multiplayersynchronizer.html).
-The multiplayer verifier now spawns real players over ENet and checks camera headings, slow mode,
+The multiplayer verifier spawns real players over ENet and checks camera headings, slow mode,
 client input delivery, resulting host displacement, and capture/focus release.
 
 ### The camera
@@ -467,7 +522,22 @@ boil.
 | [scripts/water_contact.gd](scripts/water_contact.gd) | A snapshot of something continuously in the water |
 | [scripts/water_reaction_system.gd](scripts/water_reaction_system.gd) | Pooled, energy-driven impact spray and foam crowns |
 | [scripts/free_camera.gd](scripts/free_camera.gd) | Fly camera with wave-riding mode |
-| [scripts/network/network_session.gd](scripts/network/network_session.gd) | The `NetworkSession` autoload: hosting, joining, the roster |
+| [scripts/network/network_session.gd](scripts/network/network_session.gd) | The `NetworkSession` autoload: solo, hosting, joining, the roster |
+| [scripts/network/voyage_game.gd](scripts/network/voyage_game.gd) | The voyage: spawning ashore, arrival facts, solo/host/join entry points |
+| [scripts/network/run_director.gd](scripts/network/run_director.gd) | Authoritative phase, revision, epoch, voyage clock and arrival facts |
+| [scripts/raft.gd](scripts/raft.gd) | The raft: strokes, shoves, steering lever, mooring, stroke splashes |
+| [scripts/props/jetty.gd](scripts/props/jetty.gd) | The jetty the raft is moored to, and its mooring line |
+| [scripts/props/lighthouse.gd](scripts/props/lighthouse.gd) | The mainland's lighthouse and its weather-scaled beam |
+| [scripts/paddle_rig.gd](scripts/paddle_rig.gd) | The paddle in a paddler's hands, swung with two-bone IK |
+| [scripts/ui/game_ui.gd](scripts/ui/game_ui.gd) | Front end: title, play, pause, summary, fades, device glyphs |
+| [scripts/ui/voyage_hud.gd](scripts/ui/voyage_hud.gd) | Objective card, compass, prompts, raft steering panel, crew list |
+| [scripts/ui/ui_style.gd](scripts/ui/ui_style.gd) | Palette, fonts and the shared theme |
+| [scripts/core/settings.gd](scripts/core/settings.gd) | The `Settings` autoload: saved preferences and graphics presets |
+| [scripts/audio/audio_director.gd](scripts/audio/audio_director.gd) | The `Audio` autoload: music, stings, UI sounds, ambience, 3D one-shots |
+| [scripts/audio/voyage_soundscape.gd](scripts/audio/voyage_soundscape.gd) | Every voyage sound, derived from replicated state |
+| [tools/generate_audio.py](tools/generate_audio.py) | Synthesises all music and sound; no samples |
+| [tools/verify_crossing.gd](tools/verify_crossing.gd) | A bot sails the whole voyage in every weather |
+| [tools/verify_frontend.gd](tools/verify_frontend.gd) | Title, solo, pause, summary, hosting, settings and records |
 | [scripts/network/multiplayer_game.gd](scripts/network/multiplayer_game.gd) | Runs the networked demo: spawning, weather RPCs, the HUD |
 | [scripts/network/network_player.gd](scripts/network/network_player.gd) | A player: a `BuoyantBody` cube the server simulates |
 | [scripts/network/player_input.gd](scripts/network/player_input.gd) | The one node a client owns; publishes intent, nothing else |
@@ -539,7 +609,7 @@ If waves and buoyancy ever disagree, check that the `WaveField` resource and the
 parameters match — `apply_to_material()` is the intended single source of truth, and it feeds
 the foam simulation as well as the surface.
 
-All seven suites should be green before believing anything visual. The spray one renders the
+Every suite should be green before believing anything visual. The spray one renders the
 particles' own copy of the wave spectrum into a texture and compares it against the CPU field
 point by point, so it needs a real renderer rather than `--headless`:
 
@@ -547,7 +617,7 @@ point by point, so it needs a real renderer rather than `--headless`:
 godot --path . --headless --script tools/run_suites.gd
 ```
 
-That runs all seven in turn, handles the spray suite's different invocation, and exits non-zero
+That runs them all in turn, handles the spray suite's different invocation, and exits non-zero
 if any of them fails, so it is usable from CI. Add `-- --only=raft` to run just the suites whose
 name matches. Every suite binds a fixed port, so do not run one by hand while the runner is
 going: a clash presents as `Couldn't create an ENet host` rather than as a clear error.
@@ -596,6 +666,18 @@ godot --path . --script tools/verify_spray.gd --rendering-driver d3d12
   nor ambientCG carries a true water-surface normal map (their water-tagged assets are
   ice, wet ground and puddle overlays), so it is synthesised from periodic value noise
   instead. Periodicity is what makes it tile seamlessly; measured edge deltas are 4–5/255.
+- **Music and sound** — every track and effect in `assets/audio/` is synthesised by
+  [tools/generate_audio.py](tools/generate_audio.py) from noise, sines and filters: no samples,
+  nothing to license. Loops are made seamless by wrapping their tails into their starts rather than
+  by trimming. Rerun it (numpy, scipy, soundfile) to regenerate or retune any of them.
+- **Fonts** — Fredoka and Nunito, both SIL Open Font License 1.1; the licence texts are beside
+  them in `assets/fonts/`. Both are variable fonts, and [UiStyle](scripts/ui/ui_style.gd) sets their
+  weight by the numeric OpenType tag, because the string `"wght"` is accepted and silently ignored.
+- **Icon and boot splash** — `icon.svg` (with `icon.ico` rasterised from it for Windows) and
+  `assets/boot_splash.png`, both made for this project.
+- **Characters and props** — the Kotarou player model was made in Blender for this project. The
+  jetty, lighthouse and paddle are generated in code. The barrel raft (`assets/models/raft/`) has
+  no recorded source; confirm its licence before any public release.
 
 ## Conventions
 
