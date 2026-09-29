@@ -96,6 +96,10 @@ const SUITES: Array[Dictionary] = [
 	# time: three crossings of two minutes each would otherwise hold the runner for seven.
 	{"name": "crossing", "script": "tools/verify_crossing.gd", "gpu": false,
 		"engine_args": ["--fixed-fps", "60"]},
+	# Title, solo, pause, summary, hosting, settings. Its own profile, so the best times and
+	# settings it writes never land in the player's.
+	{"name": "frontend", "script": "tools/verify_frontend.gd", "gpu": false,
+		"args": ["--profile=verify"]},
 	{"name": "spray", "script": "tools/verify_spray.gd", "gpu": true},
 ]
 

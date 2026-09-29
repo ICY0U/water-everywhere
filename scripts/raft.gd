@@ -260,6 +260,22 @@ func moor_here() -> void:
 	moored = true
 
 
+## Returns whether [param body] appears to be standing on this raft's deck, from state every peer
+## has: its replicated stance and where it is relative to the hull.
+##
+## For presentation — a HUD prompt, a footstep on wood rather than sand. The server's answer to
+## the same question is [method NetworkPlayer.standing_on], which is exact but exists only where
+## the body is simulated; this is the one a client can ask.
+func carries(body: NetworkPlayer) -> bool:
+	if body == null or body.stance != NetworkPlayer.Stance.GROUNDED:
+		return false
+	var local := to_local(body.global_position)
+	return (
+		absf(local.x) < 4.9 and absf(local.z) < 5.2
+		and local.y > DECK_HEIGHT - 1.0 and local.y < DECK_HEIGHT + 3.0
+	)
+
+
 ## Returns the lever arm a stroke taken [param lateral] metres off the centreline pulls at.
 ##
 ## Signed like the offset: left of the centreline is negative and pushes the bow right. Zero
@@ -271,6 +287,32 @@ func lever_at(lateral: float) -> float:
 		(absf(lateral) - STRAIGHT_BAND) / (FULL_TURN_OFFSET - STRAIGHT_BAND), 0.0, 1.0
 	)
 	return signf(lateral) * reach * stroke_lever
+
+
+## Raises the splash of a blade going in, beside the deck on the paddler's side. Server only.
+##
+## Reported to the ocean as a small [WaterImpact] rather than drawn here, so it travels the one
+## channel every other discrete splash already uses: the ocean's reaction system throws the
+## spray, and the multiplayer game forwards the impact to every client. Presentation only — no
+## force comes from it; the stroke's thrust is applied in [method _advance_strokes].
+func _splash_stroke(paddler_local: Vector3) -> void:
+	if ocean == null:
+		return
+	var side := signf(paddler_local.x) if absf(paddler_local.x) > 0.05 else 1.0
+	var blade := to_global(Vector3(side * 5.1, 0.0, paddler_local.z - 1.2))
+	var here := Vector2(blade.x, blade.z)
+	var impact := WaterImpact.new()
+	impact.position = Vector3(blade.x, ocean.get_water_height(here), blade.z)
+	impact.normal = ocean.get_water_normal(here)
+	impact.impact_speed = 2.2
+	impact.relative_velocity = -global_basis.z * 1.5 + Vector3.DOWN * 2.0
+	impact.waterline_radius = 0.45
+	impact.volume = 0.04
+	impact.impulse = 1025.0 * impact.volume * impact.impact_speed
+	impact.energy = 0.5 * 1025.0 * impact.volume * impact.impact_speed * impact.impact_speed
+	impact.kind = Ocean.ImpactKind.ENTRY
+	impact.source = self
+	ocean.report_impact(impact)
 
 
 ## Pulls a moored raft back toward its berth. See [member moored].
@@ -342,6 +384,7 @@ func request_stroke(paddler: NetworkPlayer, _side: float = 0.0) -> StrokeResult:
 
 	stroke_serial += 1
 	thrusting = true
+	_splash_stroke(local)
 	return StrokeResult.ACCEPTED
 
 

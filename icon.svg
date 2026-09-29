@@ -1,1 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="124" height="124" x="2" y="2" fill="#363d52" stroke="#212532" stroke-width="4" rx="14"/><g fill="#fff" transform="translate(12.322 12.322)scale(.101)"><path d="M105 673v33q407 354 814 0v-33z"/><path fill="#478cbf" d="m105 673 152 14q12 1 15 14l4 67 132 10 8-61q2-11 15-15h162q13 4 15 15l8 61 132-10 4-67q3-13 15-14l152-14V427q30-39 56-81-35-59-83-108-43 20-82 47-40-37-88-64 7-51 8-102-59-28-123-42-26 43-46 89-49-7-98 0-20-46-46-89-64 14-123 42 1 51 8 102-48 27-88 64-39-27-82-47-48 49-83 108 26 42 56 81zm0 33v39c0 276 813 276 814 0v-39l-134 12-5 69q-2 10-14 13l-162 11q-12 0-16-11l-10-65H446l-10 65q-4 11-16 11l-162-11q-12-3-14-13l-5-69z"/><path d="M483 600c0 34 58 34 58 0v-86c0-34-58-34-58 0z"/><circle cx="725" cy="526" r="90"/><circle cx="299" cy="526" r="90"/></g><g fill="#414042" transform="translate(12.322 12.322)scale(.101)"><circle cx="307" cy="532" r="60"/><circle cx="717" cy="532" r="60"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <clipPath id="tile"><rect x="8" y="8" width="240" height="240" rx="44"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <!-- Sky, in the flat steps the game's cel sky uses. -->
+    <rect x="0" y="0" width="256" height="256" fill="#2f7fd0"/>
+    <rect x="0" y="62" width="256" height="200" fill="#5ea5e2"/>
+    <rect x="0" y="102" width="256" height="160" fill="#a9d6f2"/>
+    <!-- Sun. -->
+    <circle cx="186" cy="64" r="26" fill="#ffd48a"/>
+    <circle cx="186" cy="64" r="18" fill="#fff4d6"/>
+    <!-- The mainland and its lighthouse. -->
+    <path d="M150 132 L178 96 L192 110 L206 88 L238 132 Z" fill="#4c5a6e"/>
+    <rect x="150" y="124" width="96" height="12" rx="6" fill="#e9d7a6"/>
+    <rect x="162" y="100" width="12" height="26" fill="#fbf6ec"/>
+    <rect x="162" y="106" width="12" height="7" fill="#e0533d"/>
+    <rect x="162" y="119" width="12" height="7" fill="#e0533d"/>
+    <rect x="160" y="94" width="16" height="7" rx="2" fill="#2a3240"/>
+    <rect x="163" y="88" width="10" height="7" fill="#ffe08a"/>
+    <path d="M161 88 L168 81 L175 88 Z" fill="#9a3b2f"/>
+    <!-- Sea: banded from the horizon down, as the ocean shader bands it. -->
+    <rect x="0" y="134" width="256" height="130" fill="#1ea3c8"/>
+    <path d="M0 158 Q32 146 64 158 T128 158 T192 158 T256 158 V256 H0 Z" fill="#118ab5"/>
+    <path d="M0 196 Q32 182 64 196 T128 196 T192 196 T256 196 V256 H0 Z" fill="#0b6694"/>
+    <!-- The raft: barrels under a plank deck. -->
+    <ellipse cx="96" cy="186" rx="62" ry="10" fill="#0a5c86"/>
+    <rect x="44" y="164" width="30" height="22" rx="10" fill="#2e4f86"/>
+    <rect x="80" y="164" width="30" height="22" rx="10" fill="#2e4f86"/>
+    <rect x="116" y="164" width="30" height="22" rx="10" fill="#2e4f86"/>
+    <rect x="36" y="150" width="120" height="18" rx="5" fill="#8a4b2c"/>
+    <rect x="36" y="150" width="120" height="6" rx="3" fill="#b0663c"/>
+    <rect x="62" y="150" width="4" height="18" fill="#6b3920"/>
+    <rect x="92" y="150" width="4" height="18" fill="#6b3920"/>
+    <rect x="122" y="150" width="4" height="18" fill="#6b3920"/>
+    <!-- The paddle, dipped over the side. -->
+    <rect x="128" y="112" width="7" height="72" rx="3" transform="rotate(24 131 148)" fill="#c89160"/>
+    <rect x="140" y="170" width="14" height="24" rx="5" transform="rotate(24 147 182)" fill="#e0533d"/>
+    <!-- Foam: the hard white crest the game paints. -->
+    <path d="M0 214 Q18 204 36 214 T72 214 T108 214 T144 214 T180 214 T216 214 T256 214 V226 Q236 218 216 226 T180 226 T144 226 T108 226 T72 226 T36 226 T0 226 Z" fill="#f4fbff"/>
+    <path d="M28 190 Q40 184 52 190" stroke="#f4fbff" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M168 176 Q182 169 196 176" stroke="#f4fbff" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </g>
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="none" stroke="#0d2233" stroke-width="6"/>
+</svg>

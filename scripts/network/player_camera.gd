@@ -103,6 +103,12 @@ enum ViewMode {
 ## Degrees of rotation per pixel of mouse motion.
 @export_range(0.01, 1.0, 0.01) var mouse_sensitivity: float = 0.25
 
+## Whether moving the mouse or stick up looks down, as in a flight control.
+@export var invert_y: bool = false
+
+## How fast a fully deflected right stick turns the view, in degrees per second.
+@export_range(30.0, 600.0, 5.0) var pad_look_speed: float = 170.0
+
 ## How far the view can be pitched down from level, in degrees.
 @export_range(0.0, 89.0, 1.0) var pitch_down_limit: float = 70.0
 
@@ -147,7 +153,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion != null and _mouse_captured:
 		_yaw -= deg_to_rad(motion.relative.x * mouse_sensitivity)
-		_pitch -= deg_to_rad(motion.relative.y * mouse_sensitivity)
+		_pitch -= deg_to_rad(motion.relative.y * mouse_sensitivity) * (-1.0 if invert_y else 1.0)
 		_pitch = clampf(
 			_pitch, -deg_to_rad(pitch_down_limit), deg_to_rad(pitch_up_limit)
 		)
@@ -157,13 +163,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		toggle_view_mode()
 		return
 
-	if event.is_action_pressed(&"ui_cancel"):
+	# The keyboard's Escape only. ui_cancel also carries the gamepad's B button, which in play is
+	# the push key: letting it through here released the mouse on every shove.
+	if event is InputEventKey and event.is_action_pressed(&"ui_cancel"):
 		_set_mouse_captured(not _mouse_captured)
 		return
 
 	var button := event as InputEventMouseButton
 	if (button != null and button.button_index == MOUSE_BUTTON_LEFT
 			and button.is_pressed() and not _mouse_captured):
+		_set_mouse_captured(true)
+		return
+
+	# A player who has picked up a gamepad should not have to find the mouse to resume.
+	var pad := event as InputEventJoypadButton
+	if pad != null and pad.pressed and not _mouse_captured:
 		_set_mouse_captured(true)
 
 
@@ -185,6 +199,7 @@ func _process(delta: float) -> void:
 	if not is_instance_valid(_target) or not _target.is_inside_tree():
 		return
 
+	_apply_stick_look(delta)
 	var wanted := _pivot_position()
 
 	# Kept above the water, or a trough swallows the view. The clearance is smaller in first
@@ -220,6 +235,8 @@ func follow(body: Node3D) -> void:
 	_target = body
 	if not is_instance_valid(body):
 		return
+	# Leaving a showcase shot: put the arm back to the length this view mode uses.
+	_apply_mode()
 	global_position = _pivot_position()
 	global_transform.basis = Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
 	_apply_local_body_layer()
@@ -229,9 +246,10 @@ func follow(body: Node3D) -> void:
 		input.controls_enabled = _mouse_captured and not input_blocked
 
 
-## Returns the body being followed, or null.
+## Returns the body being followed, or null — including when that body has since been freed, as
+## every player's is when a session ends.
 func target() -> Node3D:
-	return _target
+	return _target if is_instance_valid(_target) else null
 
 
 ## Turns the view to face [param point] across the water, keeping the current pitch.
@@ -247,6 +265,42 @@ func look_toward(point: Vector3) -> void:
 	# The view looks along -Z rotated by the yaw, which is (-sin yaw, -cos yaw) on the ground.
 	_yaw = atan2(-flat.x, -flat.y)
 	global_transform.basis = Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
+
+
+## Frames a shot with no player to follow: the eye at [param eye], looking at [param focus].
+##
+## For a title screen or a cutaway. The spring arm is collapsed so the camera sits exactly at
+## [param eye]; [method follow] restores it. Drops any followed body, since a showcase and a
+## player's view cannot both own the rig.
+func showcase(eye: Vector3, focus: Vector3) -> void:
+	if is_instance_valid(_target):
+		follow(null)
+		_target = null
+	if _arm != null:
+		_arm.spring_length = 0.0
+	global_position = eye
+	var flat := Vector2(focus.x - eye.x, focus.z - eye.z)
+	if flat.length_squared() > 0.0001:
+		_yaw = atan2(-flat.x, -flat.y)
+		_pitch = atan2(focus.y - eye.y, flat.length())
+	global_transform.basis = Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
+
+
+## Captures or releases the mouse, and with it whether the player's input drives their body.
+func set_mouse_captured(captured: bool) -> void:
+	_set_mouse_captured(captured)
+
+
+## Returns whether the mouse is captured for looking around.
+func is_mouse_captured() -> bool:
+	return _mouse_captured
+
+
+## Sets both fields of view, keeping first person wider by the same margin, and applies them.
+func set_field_of_view(degrees: float) -> void:
+	third_person_fov = degrees
+	first_person_fov = minf(degrees + 8.0, 110.0)
+	_apply_mode()
 
 
 ## Returns the direction the view is facing across the ground, as a yaw in radians.
@@ -276,6 +330,22 @@ func set_view_mode(mode: ViewMode) -> void:
 	_mode = mode
 	_apply_mode()
 	view_mode_changed.emit(_mode)
+
+
+## Turns the view with the right stick, at [member pad_look_speed] when fully deflected.
+##
+## Squared response, so small deflections aim finely and a full push still turns quickly.
+func _apply_stick_look(delta: float) -> void:
+	if input_blocked or not _mouse_captured:
+		return
+	var stick := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
+	if stick.is_zero_approx():
+		return
+	var shaped := stick * stick.length()
+	var rate := deg_to_rad(pad_look_speed) * delta
+	_yaw -= shaped.x * rate
+	_pitch -= shaped.y * rate * 0.7 * (-1.0 if invert_y else 1.0)
+	_pitch = clampf(_pitch, -deg_to_rad(pitch_down_limit), deg_to_rad(pitch_up_limit))
 
 
 ## Returns where the pivot wants to be this frame, in world space.

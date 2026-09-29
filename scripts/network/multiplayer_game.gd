@@ -74,6 +74,12 @@ var _status_notice: String = ""
 
 ## Process id of the second window this host opened, or -1 when it has opened none.
 var _second_window_pid: int = -1
+
+## Whether H and J start and join sessions straight from the keyboard.
+##
+## The development shortcut for every scene. A scene with its own menu switches it off, because
+## a stray H pressed while typing a name elsewhere would otherwise start a session behind it.
+var session_keys_enabled: bool = true
 var _debug_overlay: Control
 
 
@@ -173,12 +179,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match key.keycode:
 		KEY_H:
-			if not NetworkSession.is_active():
+			if session_keys_enabled and not NetworkSession.is_active():
 				_report_start(NetworkSession.host(
 					NetworkSession.port_from_command_line(), NetworkSession.name_from_command_line()
 				))
 		KEY_J:
-			if NetworkSession.is_authority():
+			if not session_keys_enabled:
+				pass
+			elif NetworkSession.is_authority() and NetworkSession.is_networked():
 				_launch_second_window()
 			elif not NetworkSession.is_active():
 				_report_start(NetworkSession.join(
@@ -219,8 +227,9 @@ func _launch_second_window() -> void:
 	# an exported game already knows what it is running.
 	if OS.has_feature("editor"):
 		arguments.append_array(["--path", ProjectSettings.globalize_path("res://")])
+	# Its own profile, so the guest window's settings and records do not overwrite the host's.
 	arguments.append_array([
-		"--", "--client", "--name=Guest",
+		"--", "--client", "--name=Guest", "--profile=guest",
 		"--port=%d" % NetworkSession.port_from_command_line(),
 	])
 
@@ -244,7 +253,8 @@ func _launch_second_window() -> void:
 ## its own clock would drift out of step with the authority it is being corrected toward and
 ## then be dragged back the moment it resumed.
 func _toggle_pause() -> void:
-	if NetworkSession.is_active():
+	# A solo session has a server but no other players, so the courtesy applies to it too.
+	if NetworkSession.is_networked():
 		return
 	get_tree().paused = not get_tree().paused
 	_refresh_status()
@@ -452,7 +462,7 @@ func _spawn_position(_peer_id: int) -> Vector3:
 
 ## Asks the server to change the weather, so every player sees the same sky.
 func _request_weather(index: int) -> void:
-	if not NetworkSession.is_active():
+	if not NetworkSession.is_networked():
 		if weather != null:
 			weather.apply_index(index)
 		return
@@ -496,7 +506,7 @@ func _broadcast_weather(index: int) -> void:
 ## is a one-frame event and cannot be reconstructed reliably, so its compact physical payload
 ## is the only water-effect data that crosses the network.
 func _on_authority_water_impacted(impact: WaterImpact) -> void:
-	if impact == null or not NetworkSession.is_active() or not multiplayer.is_server():
+	if impact == null or not NetworkSession.is_networked() or not multiplayer.is_server():
 		return
 	_receive_water_impact.rpc(
 		impact.position,
@@ -572,7 +582,8 @@ func _refresh_status() -> void:
 		return
 
 	var heading := (
-		"SERVER (peer %d)" % NetworkSession.local_peer_id() if NetworkSession.is_authority()
+		"SOLO" if NetworkSession.is_solo()
+		else "SERVER (peer %d)" % NetworkSession.local_peer_id() if NetworkSession.is_authority()
 		else "CLIENT (peer %d)" % NetworkSession.local_peer_id()
 	)
 	var lines := PackedStringArray([heading, ""])

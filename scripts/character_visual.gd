@@ -109,6 +109,9 @@ var _skeleton: Skeleton3D
 var _current_clip: StringName = &""
 var _yaw: float = 0.0
 
+## The paddle this character holds while paddling. See [PaddleRig].
+var _paddle: PaddleRig
+
 
 func _ready() -> void:
 	_animation = find_child("AnimationPlayer", true, false) as AnimationPlayer
@@ -120,11 +123,18 @@ func _ready() -> void:
 		if not _animation.has_animation(clip):
 			push_error("CharacterVisual: model is missing the '%s' clip." % clip)
 	_yaw = rotation.y
+	_paddle = PaddleRig.new()
+	_paddle.name = "PaddleRig"
+	_paddle.skeleton = _skeleton
+	add_child(_paddle)
 
 
 func _process(delta: float) -> void:
 	if _animation == null or body == null:
 		return
+	if _paddle != null and _paddle.body == null:
+		_paddle.body = body as NetworkPlayer
+		_paddle.input = input
 	if animation_enabled:
 		var clip := _choose_clip()
 		_play(clip)
@@ -146,6 +156,9 @@ func _choose_clip() -> StringName:
 	var player := body as NetworkPlayer
 	if player != null and player.stance == NetworkPlayer.Stance.FLOATING:
 		return CLIP_SWIM
+	# Paddling is done standing: the arms are the paddle's, and the legs stay planted.
+	if _paddle != null and _paddle.blend > 0.0:
+		return CLIP_IDLE
 	return CLIP_WALK if _is_walking() else CLIP_IDLE
 
 
@@ -180,7 +193,11 @@ func _play(clip: StringName) -> void:
 ## current faces the way they are actually going.
 func _face_travel(delta: float) -> void:
 	var flat := Vector2.ZERO
-	if input != null and input.is_multiplayer_authority():
+	var bow := _paddle.facing() if _paddle != null else Vector3.ZERO
+	if not bow.is_zero_approx():
+		# A paddler faces the bow, whichever way they last walked.
+		flat = Vector2(bow.x, bow.z)
+	elif input != null and input.is_multiplayer_authority():
 		# Face where this player is steering, so a character walking across a drifting raft
 		# faces its own direction of travel rather than the raft's.
 		var intent := input.world_direction()

@@ -70,6 +70,28 @@ var revision: int = 0
 ## an epoch is what makes that checkable rather than merely hoped for.
 var epoch: int = 0
 
+## Seconds the crossing has been under way this run.
+##
+## Every peer counts it while the phase is VOYAGE, so a clock can be shown without streaming
+## one, and a joiner is handed the authority's count in the baseline. Counted in
+## [method Node._process], so a paused solo game stops the clock with the sea. Only the
+## authority's count is ever recorded: the time in [member facts] is the server's.
+var voyage_seconds: float = 0.0
+
+## What happened on the voyage, recorded by the authority at arrival: the summary every peer
+## shows. Empty until then.
+##
+## Sent with the ARRIVAL transition itself rather than as a separate message, so there is no
+## window in which a peer has arrived but not yet been told the result, and included in the
+## baseline so a peer joining during the summary sees the same one. Facts only — a time, a
+## stroke count, names — never a judgement the server could not have measured.
+var facts: Dictionary = {}
+
+
+func _process(delta: float) -> void:
+	if phase == Phase.VOYAGE:
+		voyage_seconds += delta
+
 
 ## Returns the objective sentence for the current phase.
 func objective() -> String:
@@ -81,21 +103,26 @@ func objective() -> String:
 ## Ignored when the phase is unchanged, so a repeated arrival trigger cannot emit a second
 ## completion or bump the revision for nothing — the plan asks for exactly one result from a
 ## duplicate trigger.
-func advance_to(next: Phase) -> void:
+##
+## [param outcome] rides along with the transition and becomes [member facts] on every peer.
+func advance_to(next: Phase, outcome: Dictionary = {}) -> void:
 	if not _is_authority():
 		return
 	if next == phase:
 		return
 	revision += 1
-	_receive_phase.rpc(next, revision, epoch)
+	_receive_phase.rpc(next, revision, epoch, outcome)
 	# Applied locally too: rpc() alone does not call the local peer, and the server must not be
 	# the one peer that never learns its own phase.
-	_apply_phase(next, revision)
+	_apply_phase(next, revision, outcome)
 
 
 ## Returns the whole run state, for a joiner that needs a baseline rather than a delta.
 func snapshot() -> Dictionary:
-	return {"phase": phase, "revision": revision, "epoch": epoch}
+	return {
+		"phase": phase, "revision": revision, "epoch": epoch,
+		"seconds": voyage_seconds, "facts": facts,
+	}
 
 
 ## Sends the current run state to one peer. Server only.
@@ -123,20 +150,27 @@ func reset_run() -> int:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _receive_phase(next: Phase, sent_revision: int, sent_epoch: int) -> void:
+func _receive_phase(
+	next: Phase, sent_revision: int, sent_epoch: int, outcome: Dictionary = {}
+) -> void:
 	# A message from a run that no longer exists must not move this one. Checked before the
 	# revision, because a stale epoch's revision numbers are not comparable with this run's.
 	if sent_epoch != epoch:
 		return
 	if sent_revision <= revision:
 		return
-	_apply_phase(next, sent_revision)
+	_apply_phase(next, sent_revision, outcome)
 
 
 @rpc("authority", "call_remote", "reliable")
 func _receive_baseline(state: Dictionary) -> void:
 	epoch = int(state.get("epoch", 0))
-	_apply_phase(int(state.get("phase", Phase.LOBBY)) as Phase, int(state.get("revision", 0)))
+	voyage_seconds = maxf(float(state.get("seconds", 0.0)), 0.0)
+	var outcome: Variant = state.get("facts", {})
+	_apply_phase(
+		int(state.get("phase", Phase.LOBBY)) as Phase, int(state.get("revision", 0)),
+		outcome if outcome is Dictionary else {},
+	)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -144,9 +178,14 @@ func _receive_reset(sent_epoch: int) -> void:
 	_apply_reset(sent_epoch)
 
 
-func _apply_phase(next: Phase, sent_revision: int) -> void:
+func _apply_phase(next: Phase, sent_revision: int, outcome: Dictionary = {}) -> void:
 	phase = next
 	revision = sent_revision
+	if next == Phase.ARRIVAL:
+		facts = outcome.duplicate(true)
+		# The authority's measured time replaces this peer's own count, so every screen shows
+		# the same result to the tenth.
+		voyage_seconds = float(facts.get("seconds", voyage_seconds))
 	phase_changed.emit(phase, revision)
 
 
@@ -154,6 +193,8 @@ func _apply_reset(sent_epoch: int) -> void:
 	epoch = sent_epoch
 	revision = 0
 	phase = Phase.LOBBY
+	voyage_seconds = 0.0
+	facts = {}
 	phase_changed.emit(phase, revision)
 	run_reset.emit(epoch)
 

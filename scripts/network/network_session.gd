@@ -95,6 +95,9 @@ var local_player_name: String = ""
 
 var _peer: ENetMultiplayerPeer = null
 
+## Whether the running session is solo; see [method start_solo].
+var _solo: bool = false
+
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -153,6 +156,42 @@ func join(
 	return OK
 
 
+## Starts a session with no network at all: one player, who is also the server.
+##
+## A solo voyage needs every server-side system — the spawner, the run director, the authority
+## checks — and none of the socket. Hosting on ENet for one player would open a UDP port for
+## nobody, and on Windows that raises a firewall prompt before a solo player has seen the sea.
+## Godot's [OfflineMultiplayerPeer] is exactly "a server with no peers": [code]is_server()[/code]
+## is true, the unique id is 1, and RPCs with [code]call_local[/code] run here and go nowhere
+## else. So the whole authoritative game runs unchanged, with nothing listening.
+##
+## Returns [code]OK[/code]; there is nothing that can fail.
+func start_solo(player_name: String = "") -> Error:
+	leave()
+
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	_peer = null
+	role = Role.SERVER
+	_solo = true
+	local_player_name = _resolve_name(player_name)
+	players[SERVER_PEER_ID] = local_player_name
+	roster_changed.emit()
+	player_joined.emit(SERVER_PEER_ID, local_player_name)
+	session_started.emit(true)
+	print("NetworkSession: sailing solo as '%s'." % local_player_name)
+	return OK
+
+
+## Returns whether this is a solo session: authoritative, but with no network behind it.
+func is_solo() -> bool:
+	return role != Role.NONE and _solo
+
+
+## Returns whether this peer is in a session that other players could be part of.
+func is_networked() -> bool:
+	return role != Role.NONE and not _solo
+
+
 ## Ends the session and clears the roster. Safe to call when not connected.
 func leave(reason: String = REASON_LEFT) -> void:
 	if role == Role.NONE:
@@ -163,6 +202,7 @@ func leave(reason: String = REASON_LEFT) -> void:
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	_peer = null
 	role = Role.NONE
+	_solo = false
 	players.clear()
 	roster_changed.emit()
 	session_ended.emit(reason)
