@@ -15,10 +15,16 @@ The production plan, its chunk-by-chunk gates and the evidence behind each compl
 
 ## Running it
 
-Open the project in Godot 4.7 and press **F5** to play `scenes/archipelago.tscn`.
-Press **H** to host or **J** to join. You then spawn on the larger starter island, with a mountainous exploration island, five small
-islands and six low-poly background ranges. Terrain has basic cel-shaded sand/earth/rock
-textures and no vegetation. See [island world notes and previews](docs/island_world.md).
+Open the project in Godot 4.7 and press **F5** to play `scenes/voyage.tscn`, the short
+crossing. It starts offline with no one in the world yet: press **H** to host — playing alone is a
+session of one — and you arrive ashore on the home island. The barrel raft is moored off its
+beach and the mainland's mountains rise 300 m to the west. Board the raft, paddle it across, and
+step ashore on the mainland to finish the run; **R** starts a fresh one.
+
+`scenes/archipelago.tscn` is the larger world with no objective: the starter island, a
+mountainous exploration island, five small islands and six low-poly background ranges. Terrain
+has basic cel-shaded sand/earth/rock textures and no vegetation. See
+[island world notes and previews](docs/island_world.md).
 
 Or launch directly:
 
@@ -29,22 +35,28 @@ Or launch directly:
 
 | Key | Action |
 | --- | --- |
-| `WASD` | move horizontally |
-| `Q` / `E` | down / up |
-| `Shift` / `Alt` | sprint / slow |
+| `H` | host a session, from offline; playing alone is a session of one |
+| `J` | join `--address` from offline; while hosting, open a second local window that joins |
+| `WASD` | walk or swim relative to the camera, independent of hull roll |
+| `Shift` / `Alt` | sprint / slow (Alt takes priority) |
+| `Q` / `E` | dive / rise, while swimming |
 | Mouse | look |
-| `1` / `2` / `3` | sunny / overcast / stormy |
-| `C` | cycle weather |
-| `V` | toggle first / third person |
-| `F` | climb onto a nearby raft |
-| `Esc` | release the mouse |
+| `V` | toggle third / first person |
+| `F` | climb onto the raft from the water or the shore beside it |
+| `Space` | paddle while standing on the raft; hold to keep stroking |
+| `G` | shove the raft off the shallows, from the shore beside it — not from aboard |
+| `R` | restart the run (host only) |
+| `1` `2` `3` / `C` | sunny / overcast / stormy / cycle — applies to **everyone** |
+| `P` | pause (offline only) |
+| `F1` | debug panel |
+| `Esc` / left click | release the mouse and stop moving / resume control |
+| `Ctrl` + `Q` | quit |
 
 ## Multiplayer
 
-The main archipelago starts offline. Press **H** to host or **J** to join an existing host.
-Players arrive on the starter island. Press **J** while already hosting to open a second
-client window for a local test.
-Explicit `--server` and `--client` arguments remain available.
+The game starts offline. Press **H** to host or **J** to join an existing host. Players arrive
+ashore on the home island. Press **J** while already hosting to open a second client window for a
+local test. Explicit `--server` and `--client` arguments remain available.
 
 The separate `scenes/multiplayer_demo.tscn` still starts players on the floating barrel raft.
 Its deck movement, buoyancy and boarding behavior are described in
@@ -65,20 +77,6 @@ no guessing about where the key points. Without `--address=` it is `127.0.0.1` a
 same-machine only — which is what it silently was before these arguments existed. An unusable
 `--port=` is refused with a warning rather than clamped, because a typo that quietly became a
 different valid port presents as "the other machine cannot see me".
-
-| Key | Action |
-| --- | --- |
-| `WASD` | steer relative to the camera, independent of hull roll |
-| `Shift` / `Alt` | sprint / slow (Alt takes priority) |
-| `Q` / `E` | dive / rise |
-| `V` | toggle third / first person |
-| `Esc` / left click | release mouse and stop thrust / resume control |
-| `1` `2` `3` / `C` | weather (applies to **everyone**) |
-
-| `P` | pause (single player only) |
-
-| `Ctrl` + `Q` | quit |
-| `H` / `J` | host / join when offline; J opens a second client when hosting |
 
 Movement uses camera yaw in both views, with equal cardinal and diagonal thrust. Looking up or
 down and rolling in waves do not rotate the steering axes. Releasing the mouse or switching
@@ -494,6 +492,7 @@ boil.
 | [tools/verify_raft.gd](tools/verify_raft.gd) | Raft buoyancy, deck movement and late spawns |
 | [tools/capture_multiplayer.gd](tools/capture_multiplayer.gd) | Photographs both windows of a running session |
 | [tools/capture_camera.gd](tools/capture_camera.gd) | Photographs both view modes at several pitches |
+| [tools/capture_voyage.gd](tools/capture_voyage.gd) | Plays the voyage from a player's seat, pressing the real keys, and photographs each beat; `-- --no-fog` |
 | [tools/wave_probe.gdshader](tools/wave_probe.gdshader) | Renders the wave include into a float texture for that comparison |
 | [tools/capture_spray.gd](tools/capture_spray.gd) | Photographs spray and rain; `-- --spray-debug`, `--no-rain`, `--no-cube`, `--no-particles` |
 | [tools/generate_water_normals.py](tools/generate_water_normals.py) | Generates the tiling detail normal map |
@@ -539,7 +538,7 @@ If waves and buoyancy ever disagree, check that the `WaveField` resource and the
 parameters match — `apply_to_material()` is the intended single source of truth, and it feeds
 the foam simulation as well as the surface.
 
-All seven suites should be green before believing anything visual. The spray one renders the
+Every suite should be green before believing anything visual. The spray one renders the
 particles' own copy of the wave spectrum into a texture and compares it against the CPU field
 point by point, so it needs a real renderer rather than `--headless`:
 
@@ -547,10 +546,11 @@ point by point, so it needs a real renderer rather than `--headless`:
 godot --path . --headless --script tools/run_suites.gd
 ```
 
-That runs all seven in turn, handles the spray suite's different invocation, and exits non-zero
+That runs every suite in turn, handles the spray suite's different invocation, and exits non-zero
 if any of them fails, so it is usable from CI. Add `-- --only=raft` to run just the suites whose
 name matches. Every suite binds a fixed port, so do not run one by hand while the runner is
-going: a clash presents as `Couldn't create an ENet host` rather than as a clear error.
+going: a clash presents as `Couldn't create an ENet host` rather than as a clear error. On a
+Linux machine with no display, prefix the command with `xvfb-run -a` so the spray suite has one.
 
 The runner names every failing check in its summary, so read that rather than a list
 here — an earlier version of this paragraph named three checks and was out of date
@@ -565,16 +565,15 @@ during a wave transient rather than at rest, and a movement check that passed on
 the raft was heaving hard enough to fling the player along it. Each had to stay visible to
 be found.
 
-To run them individually:
+The suites and the order they run in are the `SUITES` list in
+[tools/run_suites.gd](tools/run_suites.gd), which is the one place that list is kept — along with
+the arguments the few that need them are given. To run one by hand, pass its script the same way;
+only the spray suite needs a renderer, and on Linux that renderer is Vulkan:
 
 ```sh
-godot --path . --headless --script tools/verify_waves.gd
-godot --path . --headless --script tools/verify_buoyancy.gd
-godot --path . --headless --script tools/verify_reactions.gd
-godot --path . --headless --script tools/verify_multiplayer.gd
-godot --path . --headless --script tools/verify_session_identity.gd
-godot --path . --headless --script tools/verify_raft.gd
-godot --path . --script tools/verify_spray.gd --rendering-driver d3d12
+godot --path . --headless --script tools/verify_voyage.gd
+godot --path . --script tools/verify_spray.gd --rendering-driver d3d12    # Windows
+godot --path . --script tools/verify_spray.gd --rendering-driver vulkan   # Linux
 ```
 
 ## Weather looks

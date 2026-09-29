@@ -32,8 +32,18 @@ extends SceneTree
 ## Column width for the suite name, so results line up in the terminal.
 const LABEL_WIDTH: int = 14
 
-## Rendering driver the GPU suite is asked for by name. Its whole point is a real device.
-const GPU_DRIVER: String = "d3d12"
+## Rendering driver the GPU suite is asked for by name, per platform. Its whole point is a real
+## device.
+##
+## Still named rather than left to the engine's default, for the reason [method _run_suite]
+## gives. But named per platform: D3D12 exists only on Windows, and asking for it anywhere else
+## failed the suite in a tenth of a second with no verdict — a red board that said nothing about
+## the code. On Linux the suite passes on Vulkan, software-rendered lavapipe included, under a
+## virtual display such as [code]xvfb-run[/code] when there is no real one.
+const GPU_DRIVERS: Dictionary = {"Windows": "d3d12"}
+
+## Driver for any platform [constant GPU_DRIVERS] does not name.
+const GPU_DRIVER_FALLBACK: String = "vulkan"
 
 ## Lower-cased fragments that mark a suite's closing verdict line. See [method _verdict_of].
 const VERDICT_MARKERS: Array[String] = ["passed", "failed", "failures", "timed out"]
@@ -143,7 +153,8 @@ func _run_suite(godot: String, project: String, suite: Dictionary) -> void:
 	# The GPU suite is not merely "not headless": the driver is named, because a device that
 	# quietly fell back would compare the CPU wave field against nothing in particular.
 	if suite["gpu"]:
-		arguments.append_array(["--script", suite["script"], "--rendering-driver", GPU_DRIVER])
+		arguments.append_array(["--script", suite["script"], "--rendering-driver",
+			GPU_DRIVERS.get(OS.get_name(), GPU_DRIVER_FALLBACK)])
 	else:
 		arguments.append_array(["--headless", "--script", suite["script"]])
 
