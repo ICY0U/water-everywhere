@@ -56,6 +56,9 @@ var _menu: GameMenu
 ## One line near the bottom of the screen saying what to do next. See [method _hint_text].
 var _hint: Label
 
+## The voyage's sound. See [AudioDirector].
+var _audio: AudioDirector
+
 
 func _ready() -> void:
 	super()
@@ -63,9 +66,18 @@ func _ready() -> void:
 	_director.run_reset.connect(_on_run_reset)
 	_face_destination(_camera.global_position)
 	_build_hint()
+	_audio = AudioDirector.new()
+	_audio.name = "AudioDirector"
+	_audio.game = self
+	add_child(_audio)
 	_menu = GameMenu.new()
 	_menu.name = "GameMenu"
 	_menu.game = self
+	_menu.audio = _audio
+	# A weather preset writes its own volumetric fog setting; the graphics preset has the last word.
+	if weather != null:
+		weather.weather_changed.connect(func(_preset: WeatherPreset, _index: int) -> void:
+			_menu.apply_graphics())
 	_menu.screen_changed.connect(func(_blocking: bool) -> void:
 		_refresh_status()
 		_refresh_hint())
@@ -142,6 +154,16 @@ func reset_run() -> void:
 		body.angular_velocity = Vector3.ZERO
 
 	begin_voyage()
+
+
+## Quits after silencing the audio, so the mixer can let go of its loops before the engine
+## shuts down; see [method AudioDirector.silence].
+func _quit_game() -> void:
+	if _audio != null:
+		_audio.silence()
+		for _frame in 3:
+			await get_tree().process_frame
+	super()
 
 
 ## Returns the front end, so tests and tools can drive it through its own buttons.
@@ -251,6 +273,8 @@ func _on_phase_changed(phase: RunDirector.Phase, _revision: int) -> void:
 		_crossing_seconds = 0.0
 	elif phase == RunDirector.Phase.ARRIVAL and _menu != null:
 		_menu.show_arrival(_crossing_seconds, _is_run_authority())
+		if _audio != null:
+			_audio.play_arrival()
 	_refresh_status()
 
 

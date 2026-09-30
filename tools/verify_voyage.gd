@@ -117,6 +117,59 @@ func _run() -> void:
 		"the title screen offers Play"
 	)
 
+	# --- Sound, graphics and credits ---------------------------------------------------
+	# The settings file is the player's own, and this suite changes settings, so it is put back
+	# exactly as it was — or removed again if there was none.
+	var settings_path := "user://settings.cfg"
+	var saved_settings: Variant = (
+		FileAccess.get_file_as_string(settings_path) if FileAccess.file_exists(settings_path)
+		else null)
+	var audio: Node = game.get_node_or_null("AudioDirector")
+	_expect(audio != null, "the voyage has sound")
+	var sea_bed := audio.get_node("OceanLoop") as AudioStreamPlayer
+	_expect(
+		sea_bed.playing and (sea_bed.stream as AudioStreamWAV).loop_mode
+			== AudioStreamWAV.LOOP_FORWARD,
+		"the sea bed is playing and loops"
+	)
+	# A stroke is heard from the replicated serial, which is all a client ever receives.
+	await process_frame
+	game.raft.stroke_serial += 1
+	await process_frame
+	var splashing := false
+	for child in audio.get_children():
+		if child is AudioStreamPlayer3D and (child as AudioStreamPlayer3D).playing:
+			splashing = true
+	_expect(splashing, "a paddle stroke is heard as a splash")
+	# Low graphics drops volumetric fog, and a weather change must not quietly bring it back.
+	menu._set_setting("graphics", 2)
+	game.weather.apply_index(2)
+	var environment := (game.get_node("WorldEnvironment") as WorldEnvironment).environment
+	_expect(
+		not environment.volumetric_fog_enabled and root.scaling_3d_scale < 1.0,
+		"Low graphics stays low through a weather change (fog %s, scale %.2f)" % [
+			environment.volumetric_fog_enabled, root.scaling_3d_scale]
+	)
+	menu._set_setting("graphics", 0)
+	game.weather.apply_index(0)
+	_expect(
+		environment.volumetric_fog_enabled == game.weather.current_preset().volumetric_fog_enabled,
+		"High graphics gives the weather its own fog back"
+	)
+	if saved_settings == null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(settings_path))
+	else:
+		var restore := FileAccess.open(settings_path, FileAccess.WRITE)
+		restore.store_string(saved_settings)
+		restore.close()
+	# Godot's MIT licence requires its notice in every copy, and a game is a copy.
+	var credits := menu.find_child("Licenses", true, false) as Label
+	_expect(
+		credits != null and credits.text.contains("Godot Engine contributors")
+			and credits.text.contains("Jolt"),
+		"the credits carry Godot's licence and its third-party notices"
+	)
+
 	# --- Phase and objective -------------------------------------------------------------
 	_expect(director.phase == RunDirector.Phase.LOBBY, "a fresh scene starts in LOBBY")
 	_expect(director.revision == 0, "a fresh run starts at revision 0")

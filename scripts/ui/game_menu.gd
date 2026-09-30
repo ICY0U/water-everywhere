@@ -22,7 +22,24 @@ const SETTINGS_PATH: String = "user://settings.cfg"
 const SOLO_PORT_ATTEMPTS: int = 10
 
 ## Screens, at most one of which is visible.
-enum Screen { NONE, TITLE, COOP, SETTINGS, PAUSE, ARRIVAL }
+enum Screen { NONE, TITLE, COOP, SETTINGS, PAUSE, ARRIVAL, CREDITS }
+
+## Graphics presets, heaviest first.
+##
+## What each drops was chosen by cost, not by guess at looks: volumetric fog is a full froxel
+## pass every frame and the single most expensive thing the scene draws, so it goes first;
+## multisampling next; and Low renders the 3D scene at a reduced scale, upscaled with FSR, which
+## is the one lever that scales with resolution and so rescues an integrated GPU at 1080p.
+enum Graphics { HIGH, MEDIUM, LOW }
+
+## Names shown for [enum Graphics], in order.
+const GRAPHICS_NAMES: PackedStringArray = ["High", "Medium", "Low"]
+
+## 3D render scale on Low. FSR 1 holds up well down to about this.
+const LOW_RENDER_SCALE: float = 0.7
+
+## The world's sound. Assigned by the game before this enters the tree; may be null in tests.
+var audio: AudioDirector
 
 ## The game this menu fronts. Assigned before the menu enters the tree.
 var game: VoyageGame
@@ -40,9 +57,16 @@ var _restart_button: Button
 var _again_button: Button
 var _waiting_label: Label
 var _paused_world: bool = false
-var _sensitivity: float = 0.25
-var _fullscreen: bool = false
-var _show_fps: bool = false
+## Every setting, with the value it has when nothing has been saved. One table, so loading,
+## saving and applying cannot disagree about what exists.
+var _settings: Dictionary = {
+	"mouse_sensitivity": 0.25,
+	"master_volume": 0.8,
+	"music_volume": 0.6,
+	"graphics": Graphics.HIGH,
+	"fullscreen": false,
+	"show_fps": false,
+}
 
 
 func _ready() -> void:
@@ -74,7 +98,7 @@ func _input(event: InputEvent) -> void:
 			close()
 		Screen.SETTINGS:
 			_open(_settings_return)
-		Screen.COOP:
+		Screen.COOP, Screen.CREDITS:
 			_open(Screen.TITLE)
 		Screen.NONE:
 			if NetworkSession.is_active():
@@ -130,6 +154,8 @@ func _open(screen: Screen) -> void:
 		var button := _first_button(_panels[screen])
 		if button != null:
 			button.grab_focus.call_deferred()
+	if audio != null:
+		audio.set_music(blocking)
 	screen_changed.emit(blocking)
 
 
@@ -220,36 +246,70 @@ func _on_session_ended(reason: String) -> void:
 
 func _load_settings() -> void:
 	var camera := game.get_node("PlayerCamera") as PlayerCamera
-	_sensitivity = camera.mouse_sensitivity
+	_settings["mouse_sensitivity"] = camera.mouse_sensitivity
 	var file := ConfigFile.new()
 	if file.load(SETTINGS_PATH) != OK:
 		return
-	_sensitivity = clampf(float(file.get_value("controls", "mouse_sensitivity", _sensitivity)),
-		0.05, 1.0)
-	_fullscreen = bool(file.get_value("display", "fullscreen", false))
-	_show_fps = bool(file.get_value("display", "show_fps", false))
+	for key: String in _settings:
+		var value: Variant = file.get_value("settings", key, _settings[key])
+		# A hand-edited or older file must not smuggle a string into a slider.
+		if typeof(value) == typeof(_settings[key]) or (
+				value is float and _settings[key] is int) or (value is int and _settings[key] is float):
+			_settings[key] = type_convert(value, typeof(_settings[key]))
+	_settings["mouse_sensitivity"] = clampf(_settings["mouse_sensitivity"], 0.05, 1.0)
+	_settings["master_volume"] = clampf(_settings["master_volume"], 0.0, 1.0)
+	_settings["music_volume"] = clampf(_settings["music_volume"], 0.0, 1.0)
+	_settings["graphics"] = clampi(_settings["graphics"], Graphics.HIGH, Graphics.LOW)
 
 
 func _save_settings() -> void:
 	var file := ConfigFile.new()
-	file.set_value("controls", "mouse_sensitivity", _sensitivity)
-	file.set_value("display", "fullscreen", _fullscreen)
-	file.set_value("display", "show_fps", _show_fps)
+	for key: String in _settings:
+		file.set_value("settings", key, _settings[key])
 	file.save(SETTINGS_PATH)
 
 
+## Changes one setting, applies everything, and saves.
+func _set_setting(key: String, value: Variant) -> void:
+	_settings[key] = value
+	_apply_settings()
+	_save_settings()
+
+
 func _apply_settings() -> void:
-	(game.get_node("PlayerCamera") as PlayerCamera).mouse_sensitivity = _sensitivity
+	(game.get_node("PlayerCamera") as PlayerCamera).mouse_sensitivity = (
+		_settings["mouse_sensitivity"])
+	AudioDirector.set_bus_level(&"Master", _settings["master_volume"])
+	AudioDirector.set_bus_level(AudioDirector.BUS_MUSIC, _settings["music_volume"])
 	# Only switched when it differs, so a windowed launch under the editor is left alone.
 	var fullscreen_now := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	if DisplayServer.get_name() != "headless" and fullscreen_now != _fullscreen:
+	if DisplayServer.get_name() != "headless" and fullscreen_now != _settings["fullscreen"]:
 		DisplayServer.window_set_mode(
-			DisplayServer.WINDOW_MODE_FULLSCREEN if _fullscreen
+			DisplayServer.WINDOW_MODE_FULLSCREEN if _settings["fullscreen"]
 			else DisplayServer.WINDOW_MODE_WINDOWED)
 	if game._debug_overlay != null:
 		var badge := game._debug_overlay.get_node_or_null("PerformanceBadge") as Control
 		if badge != null:
-			badge.visible = _show_fps
+			badge.visible = _settings["show_fps"]
+	apply_graphics()
+
+
+## Applies the graphics preset. Public because a weather change re-applies its own volumetric fog
+## setting, and the game calls this after every one so a Low machine stays Low.
+func apply_graphics() -> void:
+	var quality: int = _settings["graphics"]
+	var viewport := get_viewport()
+	viewport.msaa_3d = Viewport.MSAA_2X if quality == Graphics.HIGH else Viewport.MSAA_DISABLED
+	viewport.scaling_3d_mode = (
+		Viewport.SCALING_3D_MODE_FSR if quality == Graphics.LOW else Viewport.SCALING_3D_MODE_BILINEAR)
+	viewport.scaling_3d_scale = LOW_RENDER_SCALE if quality == Graphics.LOW else 1.0
+	var world := game.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world != null and world.environment != null and quality != Graphics.HIGH:
+		world.environment.volumetric_fog_enabled = false
+	elif world != null and world.environment != null and game.weather != null:
+		var preset := game.weather.current_preset()
+		if preset != null:
+			world.environment.volumetric_fog_enabled = preset.volumetric_fog_enabled
 
 
 # --- Construction ----------------------------------------------------------------------------
@@ -268,6 +328,7 @@ func _build() -> void:
 	_build_settings()
 	_build_pause()
 	_build_arrival()
+	_build_credits()
 	_open(Screen.NONE)
 
 
@@ -286,6 +347,7 @@ func _build_title() -> void:
 	_button(box, "Settings", "Settings", func() -> void:
 		_settings_return = Screen.TITLE
 		_open(Screen.SETTINGS))
+	_button(box, "Credits", "Credits", func() -> void: _open(Screen.CREDITS))
 	_button(box, "Quit", "Quit", _quit)
 	_notice = _text("")
 	_notice.add_theme_color_override("font_color", Color("f2b880"))
@@ -327,47 +389,95 @@ func _build_coop() -> void:
 
 
 func _build_settings() -> void:
-	var box := _panel(Screen.SETTINGS, "SettingsPanel", 420)
+	var box := _panel(Screen.SETTINGS, "SettingsPanel", 440)
 	box.add_child(_heading("Settings", 30))
-	var sensitivity_label := _text("")
-	box.add_child(sensitivity_label)
+	var refreshers: Array[Callable] = []
+	refreshers.append(_slider_setting(box, "Mouse sensitivity", "mouse_sensitivity", 0.05, 1.0))
+	refreshers.append(_slider_setting(box, "Volume", "master_volume", 0.0, 1.0))
+	refreshers.append(_slider_setting(box, "Music", "music_volume", 0.0, 1.0))
+	box.add_child(_text("Graphics"))
+	var graphics := OptionButton.new()
+	graphics.name = "Graphics"
+	for index in GRAPHICS_NAMES.size():
+		graphics.add_item(GRAPHICS_NAMES[index], index)
+	graphics.item_selected.connect(func(index: int) -> void: _set_setting("graphics", index))
+	box.add_child(graphics)
+	refreshers.append(func() -> void: graphics.select(_settings["graphics"]))
+	refreshers.append(_toggle_setting(box, "Fullscreen", "fullscreen"))
+	refreshers.append(_toggle_setting(box, "Show frame rate", "show_fps"))
+	# Filled in when the page opens, so it always shows what is actually in force.
+	screen_changed.connect(func(_blocking: bool) -> void:
+		if _screen == Screen.SETTINGS:
+			for refresh in refreshers:
+				refresh.call())
+	_button(box, "Back", "Back", func() -> void: _open(_settings_return))
+
+
+## Adds a labelled slider bound to [param key]; returns what refreshes it from the settings.
+func _slider_setting(box: Control, title: String, key: String, low: float, high: float) -> Callable:
+	var label := _text("")
+	box.add_child(label)
 	var slider := HSlider.new()
-	slider.name = "Sensitivity"
-	slider.min_value = 0.05
-	slider.max_value = 1.0
+	slider.name = key.to_pascal_case()
+	slider.min_value = low
+	slider.max_value = high
 	slider.step = 0.01
 	slider.custom_minimum_size.y = 24
 	box.add_child(slider)
-	var fullscreen := CheckButton.new()
-	fullscreen.name = "Fullscreen"
-	fullscreen.text = "Fullscreen"
-	box.add_child(fullscreen)
-	var fps := CheckButton.new()
-	fps.name = "ShowFps"
-	fps.text = "Show frame rate"
-	box.add_child(fps)
-	# Filled in when the page opens, so it always shows what is actually in force.
-	screen_changed.connect(func(_blocking: bool) -> void:
-		if _screen != Screen.SETTINGS:
-			return
-		slider.set_value_no_signal(_sensitivity)
-		sensitivity_label.text = "Mouse sensitivity  %.2f" % _sensitivity
-		fullscreen.set_pressed_no_signal(_fullscreen)
-		fps.set_pressed_no_signal(_show_fps))
+	var show := func(value: float) -> void:
+		label.text = "%s  %d%%" % [title, roundi(inverse_lerp(low, high, value) * 100.0)] if (
+			key != "mouse_sensitivity") else "%s  %.2f" % [title, value]
 	slider.value_changed.connect(func(value: float) -> void:
-		_sensitivity = value
-		sensitivity_label.text = "Mouse sensitivity  %.2f" % value
-		_apply_settings()
-		_save_settings())
-	fullscreen.toggled.connect(func(on: bool) -> void:
-		_fullscreen = on
-		_apply_settings()
-		_save_settings())
-	fps.toggled.connect(func(on: bool) -> void:
-		_show_fps = on
-		_apply_settings()
-		_save_settings())
-	_button(box, "Back", "Back", func() -> void: _open(_settings_return))
+		show.call(value)
+		_set_setting(key, value))
+	return func() -> void:
+		slider.set_value_no_signal(_settings[key])
+		show.call(_settings[key])
+
+
+## Adds a switch bound to [param key]; returns what refreshes it from the settings.
+func _toggle_setting(box: Control, title: String, key: String) -> Callable:
+	var toggle := CheckButton.new()
+	toggle.name = key.to_pascal_case()
+	toggle.text = title
+	toggle.toggled.connect(func(on: bool) -> void: _set_setting(key, on))
+	box.add_child(toggle)
+	return func() -> void: toggle.set_pressed_no_signal(_settings[key])
+
+
+func _build_credits() -> void:
+	var box := _panel(Screen.CREDITS, "CreditsPanel", 620)
+	box.add_child(_heading("Credits", 30))
+	box.add_child(_text(
+		"Water EveryWhere is made with the Godot Engine and Jolt Physics.\n"
+		+ "Sound effects and music were synthesised for this game."))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 300)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	var notices := Label.new()
+	notices.name = "Licenses"
+	notices.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	notices.add_theme_font_size_override("font_size", 12)
+	notices.text = _license_text()
+	scroll.add_child(notices)
+	_button(box, "Back", "Back", func() -> void: _open(Screen.TITLE))
+
+
+## Godot's own licence and the third-party components it is built from. The MIT licence Godot
+## is released under requires its notice to ship with every copy, and a game is a copy.
+func _license_text() -> String:
+	var parts := PackedStringArray(["GODOT ENGINE", Engine.get_license_text(),
+		"", "THIRD-PARTY COMPONENTS OF THE ENGINE"])
+	for component: Dictionary in Engine.get_copyright_info():
+		var holders := PackedStringArray()
+		for part: Dictionary in component.get("parts", []):
+			for holder: String in part.get("copyright", []):
+				holders.append(holder)
+			holders.append("License: %s" % part.get("license", ""))
+		parts.append("%s — %s" % [component.get("name", ""), "; ".join(holders)])
+	return "\n".join(parts)
 
 
 func _build_pause() -> void:
@@ -461,6 +571,10 @@ func _button(parent: Control, button_name: String, text: String, action: Callabl
 	button.name = button_name
 	button.text = text
 	button.custom_minimum_size.y = 42
+	# The click comes first, so a button that ends the game or changes screen is still heard.
+	button.pressed.connect(func() -> void:
+		if audio != null:
+			audio.play_ui())
 	button.pressed.connect(action)
 	parent.add_child(button)
 	return button
@@ -483,10 +597,12 @@ func _make_theme() -> Theme:
 		result.set_color("font_color", kind, Color("e6f1f8"))
 	result.set_stylebox("panel", "PanelContainer",
 		_style(Color(0.04, 0.09, 0.13, 0.9), Color("4a7890"), 22))
-	result.set_stylebox("normal", "Button", _style(Color("1d4459"), Color("3f7690"), 8))
-	result.set_stylebox("hover", "Button", _style(Color("2a6079"), Color("8fe3d8"), 8))
-	result.set_stylebox("focus", "Button", _style(Color(0, 0, 0, 0), Color("8fe3d8"), 8))
-	result.set_stylebox("pressed", "Button", _style(Color("17525a"), Color("8fe3d8"), 8))
+	for kind in ["Button", "OptionButton"]:
+		result.set_color("font_color", kind, Color("e6f1f8"))
+		result.set_stylebox("normal", kind, _style(Color("1d4459"), Color("3f7690"), 8))
+		result.set_stylebox("hover", kind, _style(Color("2a6079"), Color("8fe3d8"), 8))
+		result.set_stylebox("focus", kind, _style(Color(0, 0, 0, 0), Color("8fe3d8"), 8))
+		result.set_stylebox("pressed", kind, _style(Color("17525a"), Color("8fe3d8"), 8))
 	result.set_stylebox("normal", "LineEdit", _style(Color("0e2533"), Color("3f7690"), 8))
 	result.set_stylebox("focus", "LineEdit", _style(Color("0e2533"), Color("8fe3d8"), 8))
 	return result
