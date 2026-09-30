@@ -33,14 +33,20 @@ PLAYING WITH FRIENDS
   the host must forward UDP port 27015 on their router. Up to 8 players.
 
 SETTINGS
-  Mouse sensitivity, fullscreen and a frame-rate readout, from the menu.
+  Mouse sensitivity, volume, music, graphics quality (High / Medium / Low),
+  fullscreen and a frame-rate readout, from the menu. If the game runs slowly,
+  try Medium first, then Low.
   Saved to %APPDATA%\Godot\app_userdata\WaterEVERYWHERE\settings.cfg
 
 KNOWN ISSUES
-  - There is no sound yet.
-  - The player character has idle, walk and swim animations only.
+  - The player character has idle, walk and swim animations only; there is
+    no paddling animation yet.
   - Online play needs a forwarded port; there is no lobby or invite system.
+  - Paddling alone, the raft zig-zags: that is the steering, not a bug.
   - Windows may warn that the program is from an unknown publisher: the
     demo is not code-signed. Choose "More info" > "Run anyway".
 
 Requires Windows 10 or 11 (64-bit) and a GPU with DirectX 12 or Vulkan support.
+A Linux build (x86_64, Vulkan) is made from the same project.
+
+Made with the Godot Engine. Licence notices are under Credits in the game.

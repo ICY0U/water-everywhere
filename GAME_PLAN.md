@@ -797,3 +797,14 @@ contextual hint line, and the F1 panel restricted to debug builds. Solo binds to
 Windows asks no firewall question. Guarded in `verify_voyage.gd`; the whole journey is played
 through the real buttons and keys by `tools/capture_voyage.gd`. Release steps and the smoke test
 for the exported zip are in [RELEASE.md](RELEASE.md).
+
+### Demo 0.1.0 completion pass (30 September 2026)
+
+Sound (synthesised by `tools/generate_audio.py`, so it carries no third-party licence): a sea
+bed, wind and rain beds that follow the weather's wind speed and rain intensity, a splash for
+every replicated stroke and shove, splashes from `Ocean.water_impacted` scaled by measured impact
+energy, menu clicks, an arrival sting and title music. Graphics presets (High / Medium / Low)
+that survive weather changes, Volume and Music sliders, and a Credits screen carrying Godot's
+licence and its third-party notices. Windows and Linux release exports are produced from the
+command line; the Linux export was launched and played here.
+

@@ -12,11 +12,19 @@ in `export_presets.cfg`. Bump all three together.
    ```sh
    godot --path . --headless --script tools/run_suites.gd
    ```
-3. Project > Export > **Windows Desktop** > **Export Project**, with *Export With Debug*
-   **unticked**. A release export hides the F1 diagnostic panel (`OS.is_debug_build()`); a
-   debug export does not, and also opens a console window.
-4. Output lands in `build/windows/`. Zip `WaterEVERYWHERE.exe`, `WaterEVERYWHERE.pck` and
-   `release/README.txt` as `WaterEverywhere-demo-<version>-windows.zip`.
+3. Export, from the editor (Project > Export, *Export With Debug* **unticked**) or from the
+   command line once the 4.7.2 export templates are installed:
+   ```sh
+   godot --headless --path . --export-release "Windows Desktop" build/windows/WaterEVERYWHERE.exe
+   godot --headless --path . --export-release "Linux" build/linux/WaterEVERYWHERE.x86_64
+   ```
+   A release export hides the F1 diagnostic panel (`OS.is_debug_build()`); a debug export does
+   not, and also opens a console window.
+4. Zip each build's binary and `.pck` with `release/README.txt` as
+   `WaterEverywhere-demo-<version>-windows.zip` / `-linux.zip`. Never ship an `override.cfg`:
+   Godot reads one next to the executable and it can register autoloads.
+5. Sounds are generated, not recorded. After changing `tools/generate_audio.py`, run it and
+   re-import; the `.wav.import` files carry each loop setting.
 
 ## Smoke test the exported zip, not the editor
 
@@ -33,9 +41,22 @@ On a machine (or a clean folder) that has never run the project:
 - [ ] Play with friends: host on one PC, join from another on the LAN; both see each other
       paddle. Quitting the host sends the guest back to the title with a reason.
 - [ ] F1 does nothing in the release build.
+- [ ] Sound: sea on the title and in play, music under the menus only, a splash per stroke, a
+      click per button, a sting on arrival. Volume and Music sliders work; Music at 0 is silent.
+- [ ] Graphics Low visibly lowers resolution and removes the god-ray fog, and stays Low after
+      pressing 3 (stormy).
+- [ ] Credits opens and scrolls through Godot's licence.
 
 ## Known limits of 0.1.0
 
-No audio; three character animations (the Blender expansion is not exported yet); online play
-needs a forwarded UDP port; the build is unsigned; volumetric fog looks wrong under software
-rendering (lavapipe), so judge visuals on real hardware.
+Three character animations (the Blender expansion is not exported yet); online play needs a
+forwarded UDP port; the build is unsigned; volumetric fog can look wrong under software rendering
+(lavapipe), so judge visuals on real hardware. The rights to the raft model and the Kotarou
+character must be confirmed before public distribution: no licence or source is recorded for
+either in this repository, and Credits does not name their authors.
+
+Verified in the cloud on 30 September 2026 without Windows: the Linux release export launched,
+reached the title, played, rendered without shader errors, applied the graphics presets and quit
+cleanly. The Windows export completed with no warnings but has not been launched on Windows.
+Under the headless dummy audio driver Godot reports finished sounds as leaked at exit; a real
+audio driver retires them, which could not be confirmed here.
